@@ -1,0 +1,22 @@
+[package]
+name = "runzoo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sysinfo = "0.39"
+objc2 = "0.6"
+starship-battery = "0.11.1"
+
+[dependencies.objc2-foundation]
+version = "0.3"
+features = ["NSString", "NSData", "NSTimer", "NSDate", "NSArray", "NSGeometry", "NSRunLoop", "NSUserDefaults", "NSThread", "NSProcessInfo"]
+
+[dependencies.objc2-app-kit]
+version = "0.3"
+features = ["NSBitmapImageRep", "NSImageRep", "NSApplication", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSMenu", "NSMenuItem", "NSImage", "NSButton", "NSControl", "NSView", "NSResponder", "NSCell", "NSColor", "NSGraphics", "NSWorkspace", "NSRunningApplication"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
