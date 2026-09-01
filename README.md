@@ -89,12 +89,14 @@ The exponent pushes the visible part of the ramp into the busy half: a machine
 at 30% is only faintly tinted, one at 90% is unmistakable. It never goes flat,
 so the colour always moves when the load moves.
 
-**The calm end is not always white.** It is white on a dark menu bar and black
-on a light one — exactly what the template image used to do for us. Forcing
-white in both would make an idle animal invisible in light mode, which is the
-state your Mac is in most of the time. Everything above that end of the ramp is
-the accent you chose, so "white to red" is what you see in dark mode and "black
-to red" in light mode.
+**The calm end is white, in both appearances.** So the ramp reads as one thing:
+"white to red", whichever menu bar you are on. It used to follow the menu bar —
+white on dark, black on light, the way a template image does — and the cost of
+dropping that is worth stating plainly: on a *light* menu bar an idle animal is
+white on near-white and very nearly disappears until the load picks up. From
+about half load it is legible again. If you are on a light menu bar and want an
+idle animal you can see, pick the **Monochrome** accent: it hands the tinting
+back to macOS and adapts to either appearance.
 
 Severity is quantised to 32 steps, and the eight animation frames are repainted
 only when the step changes — not on every tick, and never in monochrome mode,
@@ -171,18 +173,11 @@ dependencies — the PNG encoder is in there too.
 ```sh
 runzoo --probe 10        # print measurements, with severity and colour, no GUI
 runzoo --dump-menu       # print the menu as built, no clicking
-runzoo --dump-tint       # print the whole colour ramp, both appearances
+runzoo --dump-tint       # print the whole colour ramp
 runzoo --dump-sprites    # every animal across the ramp  → /tmp/runzoo_sprites.raw
 runzoo --dump-spark-demo # sparklines from synthetic data → /tmp/runzoo_spark.raw
 
 python3 tools/raw_to_png.py /tmp/runzoo_sprites.raw 240 252   # look at a dump
-```
-
-Any of them can be forced into the other appearance without touching your
-system settings, because NSUserDefaults reads command line arguments:
-
-```sh
-runzoo --dump-sprites -AppleInterfaceStyle Dark
 ```
 
 ## Credit

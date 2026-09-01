@@ -39,9 +39,6 @@ const K_ANIMAL: &str = "animal";
 const K_SOURCE: &str = "source";
 const K_ALERT: &str = "alertEnabled";
 const K_ACCENT: &str = "accentColour";
-/// Read, never written: macOS puts "Dark" here in NSGlobalDomain, and the menu
-/// bar follows the same setting.
-const K_SYSTEM_APPEARANCE: &str = "AppleInterfaceStyle";
 
 // ---------------------------------------------------------------- preferences
 fn defaults() -> Retained<NSUserDefaults> {
@@ -72,13 +69,6 @@ fn load_bool(key: &str, fallback: bool) -> bool {
     }
 }
 
-/// Is the menu bar dark right now? It decides the calm end of the gradient:
-/// white on dark, black on light. (NSAppearance would answer this too, but the
-/// global default is the same answer with no extra AppKit surface.)
-fn menubar_is_dark() -> bool {
-    load_str(K_SYSTEM_APPEARANCE).is_some_and(|s| s.eq_ignore_ascii_case("dark"))
-}
-
 // ---------------------------------------------------------------- state
 struct App {
     metrics: Metrics,
@@ -95,8 +85,7 @@ struct App {
     alerted: bool,
     /// Index into tint::PALETTE
     accent: usize,
-    /// The (appearance, severity step) the current frames were painted for
-    dark: bool,
+    /// The severity step the current frames were painted for
     level: u8,
 }
 
@@ -105,9 +94,9 @@ impl App {
         PALETTE[self.accent].rgb
     }
 
-    /// The calm end of the gradient for the current appearance.
+    /// The calm end of the gradient.
     fn base(&self) -> Rgb {
-        tint::neutral(self.dark)
+        tint::CALM
     }
 
     /// What the animal is painted in right now.
@@ -115,13 +104,13 @@ impl App {
         tint::level_colour(self.level, self.base(), self.accent_rgb())
     }
 
-    /// What (appearance, severity step) the frames *should* be painted for.
-    /// Monochrome pins both, because in that mode macOS does the tinting.
-    fn wanted_paint(&self, dark: bool, load: f32) -> (bool, u8) {
+    /// What severity step the frames *should* be painted for. Monochrome pins
+    /// it, because in that mode macOS does the tinting.
+    fn wanted_level(&self, load: f32) -> u8 {
         if self.accent_rgb().is_some() {
-            (dark, tint::level(load))
+            tint::level(load)
         } else {
-            (false, 0)
+            0
         }
     }
 }
@@ -326,13 +315,11 @@ impl Controller {
     fn paint(&self, force: bool) {
         let iv = self.ivars();
         let mut app = iv.app.borrow_mut();
-        let dark = menubar_is_dark();
         let load = app.metrics.latest(app.source);
-        let (want_dark, want_level) = app.wanted_paint(dark, load);
-        if !force && !app.frames.is_empty() && want_dark == app.dark && want_level == app.level {
+        let want_level = app.wanted_level(load);
+        if !force && !app.frames.is_empty() && want_level == app.level {
             return;
         }
-        app.dark = want_dark;
         app.level = want_level;
         let frames = build_frames(&app);
         app.frames = frames;
@@ -370,7 +357,7 @@ impl Controller {
     fn build_menu(&self, menu: &NSMenu) {
         let mtm = MainThreadMarker::from(self);
         let app = self.ivars().app.borrow();
-        let base = tint::neutral(menubar_is_dark());
+        let base = tint::CALM;
         let accent = app.accent_rgb();
         menu.removeAllItems();
 
@@ -505,7 +492,6 @@ fn new_app(source: Source, animal_idx: usize, accent: usize, metrics: Metrics) -
         over_since: None,
         alerted: false,
         accent,
-        dark: menubar_is_dark(),
         level: 0,
     }
 }
@@ -515,8 +501,7 @@ fn probe() {
     let mut m = Metrics::new();
     println!("sampling once a second (the first two rounds are warm-up, so throughput reads 0)");
     let n: u32 = std::env::args().nth(2).and_then(|s| s.parse().ok()).unwrap_or(2);
-    let dark = menubar_is_dark();
-    let base = tint::neutral(dark);
+    let base = tint::CALM;
     let accent = PALETTE[tint::accent_index(
         &load_str(K_ACCENT).unwrap_or_else(|| tint::DEFAULT_ACCENT.into()),
     )]
@@ -550,13 +535,9 @@ fn probe() {
 /// opening the menu — or even having a menu bar.
 fn dump_tint() {
     let steps = [0.0f32, 10.0, 25.0, 40.0, 50.0, 60.0, 70.0, 85.0, 95.0, 100.0];
-    for dark in [true, false] {
-        let base = tint::neutral(dark);
-        println!(
-            "\nmenu bar: {}   (calm end = {})",
-            if dark { "dark" } else { "light" },
-            base.hex()
-        );
+    {
+        let base = tint::CALM;
+        println!("\ncalm end = {} (the same in both appearances)", base.hex());
         print!("{:<12}", "load %");
         for s in steps {
             print!("{:>9.0}", s);
@@ -619,9 +600,8 @@ fn dump_menu(mtm: MainThreadMarker) {
 
     let app = ctrl.ivars().app.borrow();
     println!(
-        "\npainting: accent {} · menu bar {} · severity step {}/{} · animal {}",
+        "\npainting: accent {} · severity step {}/{} · animal {}",
         PALETTE[app.accent].label,
-        if app.dark { "dark" } else { "light" },
         app.level,
         tint::LEVELS - 1,
         app.colour().hex()
@@ -653,8 +633,7 @@ fn dump_spark_demo() {
         ("spikes (short bursts)", |i| if i % 17 == 0 { 95.0 } else { 8.0 }),
         ("saturated (pinned at 100%)", |_| 100.0),
     ];
-    let dark = menubar_is_dark();
-    let base = tint::neutral(dark);
+    let base = tint::CALM;
     let accent = PALETTE[tint::accent_index(
         &load_str(K_ACCENT).unwrap_or_else(|| tint::DEFAULT_ACCENT.into()),
     )]
@@ -673,8 +652,7 @@ fn dump_spark_demo() {
 /// Every animal, every frame, painted across the severity ramp. This is how the
 /// colour work gets checked: one picture instead of staring at the menu bar.
 fn dump_sprites() {
-    let dark = menubar_is_dark();
-    let base = tint::neutral(dark);
+    let base = tint::CALM;
     let accent = PALETTE[tint::accent_index(
         &load_str(K_ACCENT).unwrap_or_else(|| tint::DEFAULT_ACCENT.into()),
     )]

@@ -15,18 +15,18 @@ impl Rgb {
 }
 
 pub const WHITE: Rgb = Rgb(255, 255, 255);
-pub const BLACK: Rgb = Rgb(0, 0, 0);
 
-/// The calm end of the gradient. White on a dark menu bar, black on a light one
-/// — which is exactly what the template image used to do for us. Forcing white
-/// in both would make an idle animal invisible in light mode.
-pub fn neutral(dark: bool) -> Rgb {
-    if dark {
-        WHITE
-    } else {
-        BLACK
-    }
-}
+/// The calm end of the gradient — always white, in both appearances.
+///
+/// This used to follow the menu bar: white on dark, black on light, the way a
+/// template image does. It is white in both now because that is the look that
+/// was asked for, and the gradient reads as one thing rather than two.
+///
+/// The cost is real and worth knowing: on a *light* menu bar an idle animal is
+/// white on near-white, so it very nearly disappears until the load picks up.
+/// Anyone who wants the old behaviour back has the Monochrome accent, which
+/// hands the tinting to macOS and adapts to either appearance.
+pub const CALM: Rgb = WHITE;
 
 pub struct Accent {
     pub key: &'static str,
@@ -124,10 +124,11 @@ mod tests {
     }
 
     #[test]
-    fn light_mode_starts_black_not_white() {
-        // An idle animal must stay visible on a light menu bar.
-        assert_eq!(neutral(false), BLACK);
-        assert_eq!(colour_for(0.0, neutral(false), Some(Rgb(255, 0, 0))), BLACK);
+    fn the_ramp_starts_white_in_both_appearances() {
+        // There is only one calm end now, and it is white. Deliberate: an idle
+        // animal on a light menu bar is the price, see CALM.
+        assert_eq!(CALM, WHITE);
+        assert_eq!(colour_for(0.0, CALM, Some(Rgb(255, 0, 0))), WHITE);
     }
 
     #[test]
