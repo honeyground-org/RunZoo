@@ -1,110 +1,191 @@
 # RunZoo
 
-메뉴바에서 동물이 시스템 부하만큼 빨리 달립니다. 한가하면 어슬렁, 바쁘면 전력질주.
+An animal runs across your menu bar as fast as your Mac is busy, and wears the
+colour of how bad it is. Idle, it strolls in plain white; overloaded, it sprints
+in red.
 
-macOS 전용 · Rust · 의존성 최소 · 번들 532KB
+macOS only · Rust · minimal dependencies · 548KB bundle
 
-<!-- 스크린샷 자리 -->
+<!-- screenshot goes here -->
 
-## 동물 일곱 마리
+## Install
 
-고양이 · 강아지 · 방울뱀 · 다람쥐 · 토끼 · 코끼리 · 닭
+**The quick way — no Rust, nothing to build.** Grab `RunZoo.zip` from the
+[releases page](https://github.com/wangjacsi/RunZoo/releases), unzip it, and
+drag `RunZoo.app` into Applications. The build is ad-hoc signed rather than
+notarised, so macOS quarantines the download; clear it once:
 
-메뉴바 아이콘은 **템플릿 이미지**로 만들었습니다. 실루엣만 그리면 macOS 가
-다크/라이트 모드에 맞춰 알아서 칠해줍니다. 색을 못 쓰는 대신 일곱 종을
-**형태만으로** 구별해야 했고, 그게 원래 동물을 알아보는 방식이라 잘 맞았습니다 —
-코끼리는 코, 토끼는 귀, 다람쥐는 꼬리, 닭은 볏, 방울뱀은 S자와 방울.
-
-같은 부하라도 동물마다 걸음 배속이 다릅니다. 코끼리는 0.6배로 느긋하고
-다람쥐는 1.4배로 부산합니다 (`src/animal.rs`).
-
-## 기능
-
-**미니 대시보드** — 아이콘을 누르면 CPU·메모리·디스크·네트워크·배터리의
-최근 60초가 각각 작은 그래프로 뜹니다.
-
-**속도 기준 고르기** — 대시보드에서 줄을 누르면 그 값이 동물 속도가 됩니다.
-배터리를 고르면 남은 양이 적을수록 다급하게 뜁니다.
-
-**과부하 알림 + 범인** — 고른 값이 85% 를 30초 넘게 유지하면 알림을 띄우고
-가장 많이 쓰고 있는 프로세스를 알려줍니다. 70% 아래로 내려와야 경보가 풀립니다
-(경계에서 알림이 떨리는 걸 막습니다).
-
-## 속도 계산
-
-RunCat 의 곡선을 그대로 따르되 동물별 배속을 곱합니다.
-
-```
-speed    = max(1, 부하% / 5) × 동물배속
-프레임간격 = 500 / speed  ms   (33ms ~ 500ms 로 자름)
+```sh
+xattr -dr com.apple.quarantine /Applications/RunZoo.app
+open /Applications/RunZoo.app
 ```
 
-부하 0% → 500ms (2fps, 어슬렁) · 부하 100% → 33ms (30fps, 전력질주).
+**From source, on a Mac with nothing installed yet.** One command. It installs
+the Xcode Command Line Tools and Rust if they are missing, builds, installs into
+`/Applications` and launches:
 
-최대치를 30fps 로 자른 건 실측 때문입니다. 45fps 로 두면 애니메이션에만 CPU 를
-더 쓰는데 눈에 띄는 차이가 없었습니다. **부하를 재는 앱이 부하를 만들면 안 됩니다.**
+```sh
+curl -fsSL https://raw.githubusercontent.com/wangjacsi/RunZoo/main/tools/install.sh | bash
+```
 
-## 실측치
+Already have a checkout? `./tools/install.sh`, and add `--login-item` to start it
+at login. (By hand, that is System Settings → General → Login Items → add
+`/Applications/RunZoo.app`.)
 
-| 항목 | 값 |
+**Build only.** `./tools/bundle.sh` writes `dist/RunZoo.app`; add `--universal`
+for a binary that runs on both Apple silicon and Intel.
+
+## Seven animals
+
+Cat · Dog · Rattlesnake · Squirrel · Rabbit · Elephant · Chicken
+
+The menu bar icon is drawn as a silhouette. Colour is carried by the fill, so
+the seven have to be told apart **by shape alone** — which is how you recognise
+an animal anyway: the elephant by its trunk, the rabbit by its ears, the
+squirrel by its tail, the chicken by its comb, the rattlesnake by its S and its
+rattle.
+
+At the same load each animal walks at its own tempo. The elephant ambles at
+0.6x, the squirrel fusses at 1.4x (`src/animal.rs`).
+
+## What it does
+
+**Mini dashboard** — click the icon and the last 60 seconds of CPU, memory,
+disk, network and battery each appear as a small graph.
+
+**Pick what sets the speed** — click a row and that value drives the animal.
+Pick battery and it runs more frantically the less charge is left.
+
+**Severity in colour** — see below.
+
+**Overload alert, with the culprit** — if the chosen value stays above 85% for
+more than 30 seconds you get a notification naming the process using the most.
+It clears once the value drops back under 70%, which stops it chattering at the
+boundary.
+
+## Severity in colour
+
+Every source is normalised to 0..100, so one ramp turns any of them into "how
+bad is this" and then into a colour. The colour shows up in three places:
+
+- the **animal in the menu bar**, painted for whichever source is driving it;
+- **every row of the dashboard**, coloured sample by sample — so a sparkline is
+  a trace of severity over time, not one flat tint. A calm minute stays neutral
+  and the spike in the middle of it stands out;
+- the **palette itself**, where each entry is drawn as the whole gradient it
+  would paint with, so you pick a ramp you can see rather than the name of a
+  colour.
+
+Pick the accent under **Severity colour** in the menu: red (the default),
+orange, yellow, green, teal, blue, purple, pink, or monochrome to switch the
+whole thing off and go back to the plain template icon.
+
+```
+severity = (load / 100) ^ 1.6          # 0 at rest, 1 at full
+colour   = neutral + (accent - neutral) * severity
+```
+
+The exponent pushes the visible part of the ramp into the busy half: a machine
+at 30% is only faintly tinted, one at 90% is unmistakable. It never goes flat,
+so the colour always moves when the load moves.
+
+**The calm end is not always white.** It is white on a dark menu bar and black
+on a light one — exactly what the template image used to do for us. Forcing
+white in both would make an idle animal invisible in light mode, which is the
+state your Mac is in most of the time. Everything above that end of the ramp is
+the accent you chose, so "white to red" is what you see in dark mode and "black
+to red" in light mode.
+
+Severity is quantised to 32 steps, and the eight animation frames are repainted
+only when the step changes — not on every tick, and never in monochrome mode,
+where macOS does the tinting for us.
+
+## Speed maths
+
+The RunCat curve, multiplied by each animal's tempo.
+
+```
+speed          = max(1, load% / 5) x tempo
+frame interval = 500 / speed  ms   (clamped to 33ms .. 500ms)
+```
+
+Load 0% → 500ms (2fps, a stroll) · load 100% → 33ms (30fps, a sprint).
+
+The 30fps ceiling comes from measurement. At 45fps the animation cost more CPU
+with no visible difference. **An app that measures load must not create it.**
+
+## Measurements
+
+| | |
 |---|---|
-| 유휴 CPU | 약 2.5% (측정 1.35% + 애니메이션 1.2%) |
-| 최대 부하 시 CPU | 약 5.5% |
-| 메모리 | 약 50MB |
-| 번들 크기 | 532KB |
+| Bundle size | 548KB (461KB binary) |
+| Memory | about 40MB resident |
+| Idle CPU | about 2.5% (1.35% measuring + 1.2% animating) |
+| CPU at full load | about 5.5% |
 
-측정하며 알게 된 것 두 가지를 적어 둡니다.
+The two CPU rows were measured on the monochrome build. Colour was measured
+against it side by side, both running for the same minute on the same busy
+machine (system load 140–250%, so the animation was near its 30fps ceiling):
+median 5.4% with colour against 4.95% without, twelve samples each. Half a
+percentage point, at the edge of the run-to-run noise — the repaint only fires
+when the severity step moves, and costs about 11k pixel writes when it does.
 
-**상태아이템 길이는 가변이어야 합니다.** 고정 길이로 두면 매 프레임 이미지를
-틀에 맞추는 일이 생겨서 40fps 기준 CPU 가 8% → 26% 로 뜁니다 (번갈아 3회씩 실측).
-직관과 반대라 주석으로 남겨 뒀습니다 (`src/main.rs`).
+Two things worth writing down from measuring.
 
-**디스크 처리량은 `iostat` 과 일치합니다.** 지속 쓰기 구간에서 우리 7.5~8.0 GB/s,
-`iostat` 7.7~7.9 GB/s.
+**The status item must be variable length.** Fix its length and macOS refits the
+image every frame, which took CPU from 8% to 26% at 40fps (measured three times,
+alternating). That is the opposite of the intuition, so it is a comment in
+`src/main.rs`.
 
-## 알려진 한계
+**Disk throughput agrees with `iostat`.** During a sustained write we read
+7.5–8.0 GB/s against `iostat`'s 7.7–7.9 GB/s.
 
-**짧게 살다 죽는 프로세스의 디스크 I/O 는 놓칩니다.** 프로세스별 입출력을
-합산하는 방식이라, 두 번의 갱신(2초) 사이에 태어나서 죽은 프로세스는 한 번도
-관측되지 않습니다. `dd` 로 800MB 를 쓰면 35KB/s 로 잡힙니다. 컴파일처럼 짧은
-프로세스가 우르르 도는 작업은 실제보다 낮게 나옵니다.
-제대로 고치려면 IOKit 의 블록 장치 통계를 직접 읽어야 합니다.
+## Known limits
 
-**메모리 사용량은 활성 상태 보기와 다르게 보일 수 있습니다.** `sysinfo` 의
-정의(전체 − 사용 가능)를 씁니다. macOS 가 캐시와 압축 메모리를 세는 방식과 달라서
-활성 상태 보기보다 낮게 나옵니다.
+**Disk I/O from short-lived processes is missed.** Throughput is summed per
+process, so anything born and dead between two refreshes (2 seconds) is never
+observed. Writing 800MB with `dd` shows up as 35KB/s. Work made of many brief
+processes, like a compile, reads lower than it is. Fixing it properly means
+reading IOKit's block device statistics directly.
 
-## 만들기
+**Memory can disagree with Activity Monitor.** We use `sysinfo`'s definition
+(total − available), which counts cache and compressed memory differently to
+macOS, so it reads lower.
 
-```sh
-./tools/bundle.sh     # 스프라이트·아이콘 생성 → 릴리스 빌드 → dist/RunZoo.app
-open dist/RunZoo.app
-```
+## Redrawing the animals
 
-로그인 시 자동 실행은 시스템 설정 → 일반 → 로그인 항목에 `dist/RunZoo.app` 을 추가하세요.
-
-## 동물 다시 그리기
-
-스프라이트는 손으로 픽셀을 찍지 않고 도형을 조립해서 생성합니다. 몸통·머리·꼬리를
-타원과 굵기가 변하는 곡선으로 놓고, 프레임마다 다리 위상을 돌립니다.
-
-```sh
-python3 tools/gen_sprites.py   # assets/animals/*/ 와 src/sprites.rs 갱신
-open assets/animals/_contact_sheet.png   # 일곱 종 × 8프레임 대조표
-```
-
-숫자를 고치고 다시 돌린 뒤 대조표를 보면 됩니다. 의존성 없이 순수 파이썬입니다
-(PNG 인코더까지 직접 들어있습니다).
-
-## 개발용 플래그
+Sprites are assembled from shapes rather than punched in pixel by pixel: bodies,
+heads and tails as ellipses and tapering curves, with the leg phase rotated each
+frame.
 
 ```sh
-runzoo --probe 10        # 측정값을 터미널에 찍는다 (GUI 없이 계층 검증)
-runzoo --dump-menu       # 메뉴 구성을 그대로 찍는다 (클릭 없이 검증)
-runzoo --dump-spark-demo # 스파크라인을 합성 데이터로 그려 /tmp 에 떨군다
+python3 tools/gen_sprites.py   # refreshes assets/animals/* and src/sprites.rs
+open assets/animals/_contact_sheet.png   # seven species x 8 frames, side by side
 ```
 
-## 출처
+Change the numbers, run it again, look at the sheet. Pure Python, no
+dependencies — the PNG encoder is in there too.
 
-RunCat365 (Takuto Nakamura, Apache-2.0) 의 발상에서 출발했습니다.
-가져온 것과 새로 쓴 것의 구분은 [NOTICE](NOTICE) 에 적어 뒀습니다.
+## Developer flags
+
+```sh
+runzoo --probe 10        # print measurements, with severity and colour, no GUI
+runzoo --dump-menu       # print the menu as built, no clicking
+runzoo --dump-tint       # print the whole colour ramp, both appearances
+runzoo --dump-sprites    # every animal across the ramp  → /tmp/runzoo_sprites.raw
+runzoo --dump-spark-demo # sparklines from synthetic data → /tmp/runzoo_spark.raw
+
+python3 tools/raw_to_png.py /tmp/runzoo_sprites.raw 240 252   # look at a dump
+```
+
+Any of them can be forced into the other appearance without touching your
+system settings, because NSUserDefaults reads command line arguments:
+
+```sh
+runzoo --dump-sprites -AppleInterfaceStyle Dark
+```
+
+## Credit
+
+Started from the idea in RunCat365 (Takuto Nakamura, Apache-2.0). What was taken
+and what was not is spelled out in [NOTICE](NOTICE).

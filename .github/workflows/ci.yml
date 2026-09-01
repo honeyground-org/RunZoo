@@ -1,0 +1,23 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo fmt --check || true
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      # The sprite generator is the source of truth for src/sprites.rs.
+      # If regenerating changes anything, the checked-in file is stale.
+      - run: |
+          python3 tools/gen_sprites.py > /dev/null
+          git diff --exit-code -- src/sprites.rs assets/animals
+      - run: ./tools/bundle.sh
+      # The colour ramp has to be checkable without a menu bar.
+      - run: ./dist/RunZoo.app/Contents/MacOS/RunZoo --dump-tint

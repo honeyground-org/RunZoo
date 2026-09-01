@@ -1,0 +1,58 @@
+# Publishes a ready-to-run RunZoo.app so nobody needs Rust to use it.
+# Tag a commit (git tag v0.1.0 && git push --tags) and the zip lands on the
+# release page a few minutes later.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build universal .app
+        run: ./tools/bundle.sh --universal
+
+      - name: Check the binary really is universal
+        run: |
+          lipo -archs dist/RunZoo.app/Contents/MacOS/RunZoo
+          lipo -archs dist/RunZoo.app/Contents/MacOS/RunZoo | grep -q arm64
+          lipo -archs dist/RunZoo.app/Contents/MacOS/RunZoo | grep -q x86_64
+
+      - name: Zip
+        run: ditto -c -k --keepParent dist/RunZoo.app RunZoo.zip
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES=$(cat <<'MD'
+          ## Install
+
+          1. Download `RunZoo.zip`, unzip it, drag **RunZoo.app** to Applications.
+          2. First launch only — the app is ad-hoc signed, not notarised, so
+             macOS quarantines the download:
+
+          ```sh
+          xattr -dr com.apple.quarantine /Applications/RunZoo.app
+          open /Applications/RunZoo.app
+          ```
+
+          No Rust, no Xcode, nothing else to install. Universal: Apple silicon
+          and Intel.
+
+          Prefer to build it yourself? `./tools/install.sh` does the whole thing,
+          including installing Rust if you do not have it.
+          MD
+          )
+          gh release create "${GITHUB_REF_NAME}" RunZoo.zip \
+            --title "RunZoo ${GITHUB_REF_NAME}" \
+            --notes "$NOTES" \
+            || gh release upload "${GITHUB_REF_NAME}" RunZoo.zip --clobber
