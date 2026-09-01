@@ -1,12 +1,13 @@
-//! 시스템 측정. 다섯 가지 소스를 같은 모양(0~100%)으로 정규화해서
-//! 어느 것이든 동물 속도의 기준으로 쓸 수 있게 한다.
+//! System measurement. Five sources normalised to the same shape (0..100%) so
+//! that any of them can drive the animal's speed - and, since the colour ramp
+//! reads the same number, its severity colour too.
 use std::collections::VecDeque;
 use std::path::Path;
 use std::time::Instant;
 
 use sysinfo::{Disks, Networks, ProcessesToUpdate, System};
 
-/// 대시보드에 그릴 최근 표본 수 (1초 간격이므로 60초)
+/// How many recent samples the dashboard draws (one per second, so 60s)
 pub const HISTORY: usize = 60;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -50,10 +51,10 @@ impl Source {
     pub fn label(self) -> &'static str {
         match self {
             Source::Cpu => "CPU",
-            Source::Memory => "메모리",
-            Source::Disk => "디스크",
-            Source::Network => "네트워크",
-            Source::Battery => "배터리",
+            Source::Memory => "Memory",
+            Source::Disk => "Disk",
+            Source::Network => "Network",
+            Source::Battery => "Battery",
         }
     }
 
@@ -73,33 +74,36 @@ pub struct Metrics {
     disks: Disks,
     nets: Networks,
     battery: Option<starship_battery::Manager>,
-    /// 소스별 최근 값 (0~100)
+    /// Recent values per source (0..100)
     pub hist: Vec<VecDeque<f32>>,
-    /// 소스별 사람이 읽을 설명. "34.2%" / "12.3 MB/s" 같은 것
+    /// A human-readable detail per source: "34.2%", "12.3 MB/s" and so on
     pub detail: Vec<String>,
-    /// 소스를 실제로 읽을 수 있는지. 배터리 없는 맥이 있다.
+    /// Whether the source can actually be read. Some Macs have no battery.
     pub available: [bool; 5],
     pub top: Vec<Proc>,
-    /// 처리량 계열은 절대 상한이 없어서, 최근에 본 최댓값 대비로 환산한다.
+    /// Throughput has no absolute ceiling, so we scale it against the highest
+    /// rate seen recently.
     net_peak: f64,
     disk_peak: f64,
     last: Instant,
-    /// 첫 두 번은 버린다. refresh_processes 의 첫 호출은 그 초의 증분이 아니라
-    /// 프로세스마다 살아온 내내의 누적 바이트를 돌려주기 때문이다.
+    /// Throw the first two rounds away: the first refresh_processes call
+    /// reports each process's lifetime byte total, not that second's delta.
     warmup: u8,
-    /// 프로세스 열거는 이 앱에서 제일 비싼 일이다. 2초에 한 번만 한다.
+    /// Enumerating processes is the most expensive thing this app does.
+    /// Once every two seconds is enough.
     proc_tick: u8,
     last_proc: Instant,
     disk_pct: f32,
     disk_rate: f64,
-    /// 용량은 초 단위로 변할 리 없다. 열 번에 한 번만 다시 잰다.
+    /// Disk capacity does not move by the second. Re-measure every tenth tick.
     capacity: f32,
     cap_tick: u8,
 }
 
-/// 누적값을 증분으로 착각했을 때만 걸리라고 둔 뒷문. 예열 건너뛰기가 본 방어이고
-/// 이건 보조다. 이 맥에서 실측한 지속 쓰기가 8.0 GB/s 였으므로 (iostat 과 대조함)
-/// 진짜 값이 기각되지 않도록 넉넉히 잡는다.
+/// A back stop that should only ever catch a lifetime total mistaken for a
+/// delta. Skipping the warm-up rounds is the real defence; this is the spare.
+/// Sustained writes measured 8.0 GB/s on this Mac (checked against iostat), so
+/// the ceiling is set well clear of any real reading.
 const RATE_SANITY_CEILING: f64 = 64.0 * 1024.0 * 1024.0 * 1024.0;
 
 fn human_rate(bytes_per_sec: f64) -> String {
@@ -163,8 +167,9 @@ impl Metrics {
         self.hist[s.idx()].back().copied().unwrap_or(0.0)
     }
 
-    /// 처리량(초당 바이트)을 0~100 으로 바꾼다. 절대 상한이 없는 값이라
-    /// 최근에 본 최댓값 대비로 환산하고, 그 최댓값은 서서히 잊는다.
+    /// Turn a throughput (bytes per second) into 0..100. There is no absolute
+    /// ceiling for it, so scale against the highest rate seen recently and let
+    /// that peak decay away.
     fn throughput(&mut self, rate: f64, peak: fn(&mut Metrics) -> &mut f64) -> f32 {
         let p = peak(self);
         *p *= 0.98;
@@ -190,7 +195,7 @@ impl Metrics {
         self.push(Source::Cpu, cpu);
         self.detail[Source::Cpu.idx()] = format!("{cpu:.1}%");
 
-        // --- 메모리
+        // --- Memory
         self.sys.refresh_memory();
         let (used, total) = (self.sys.used_memory(), self.sys.total_memory());
         let mem = if total > 0 { used as f32 / total as f32 * 100.0 } else { 0.0 };
@@ -198,9 +203,9 @@ impl Metrics {
         self.detail[Source::Memory.idx()] =
             format!("{mem:.0}% · {} / {}", human_bytes(used), human_bytes(total));
 
-        // --- 프로세스: 범인 목록과 디스크 처리량을 한 번에 얻는다.
-        // 한계: 두 번의 갱신 사이에 태어나 죽은 프로세스의 입출력은 사라진다.
-        // 오래 사는 프로세스에 대해서는 iostat 과 일치하는 것을 확인했다.
+        // --- Processes: the culprit list and disk throughput in one pass.
+        // Limit: I/O from a process born and dead between two refreshes is lost.
+        // For long-lived processes this was verified to agree with iostat.
         if self.proc_tick == 0 {
             let pdt = self.last_proc.elapsed().as_secs_f64().max(0.05);
             self.last_proc = Instant::now();
@@ -229,12 +234,12 @@ impl Metrics {
         let pct = self.disk_pct;
         self.push(Source::Disk, pct);
         let cap = self.disk_capacity();
-        self.detail[Source::Disk.idx()] = format!("{} · 사용 {cap:.0}%", human_rate(disk_rate));
+        self.detail[Source::Disk.idx()] = format!("{} · {cap:.0}% used", human_rate(disk_rate));
 
-        // --- 네트워크
+        // --- Network
         self.nets.refresh(true);
         let mut bytes = 0u64;
-        for (_, n) in self.nets.iter() {
+        for n in self.nets.values() {
             bytes += n.received() + n.transmitted();
         }
         let net_rate = if warming { 0.0 } else { bytes as f64 / dt };
@@ -242,7 +247,8 @@ impl Metrics {
         self.push(Source::Network, pct);
         self.detail[Source::Network.idx()] = human_rate(net_rate);
 
-        // --- 배터리: 남은 양이 적을수록 부하가 높다고 본다 (다급하게 뛴다)
+        // --- Battery: the less is left, the higher the "load", so the animal
+        // runs as if in a hurry - and the severity colour rises with it.
         if let Some(m) = &self.battery {
             if let Ok(mut it) = m.batteries() {
                 if let Some(Ok(b)) = it.next() {
@@ -250,14 +256,15 @@ impl Metrics {
                     self.available[Source::Battery.idx()] = true;
                     self.push(Source::Battery, 100.0 - soc);
                     self.detail[Source::Battery.idx()] =
-                        format!("{soc:.0}% 남음 · {:?}", b.state());
+                        format!("{soc:.0}% left · {:?}", b.state());
                 }
             }
         }
     }
 
-    /// 부팅 볼륨 하나만 본다. APFS 는 여러 볼륨이 한 컨테이너를 나눠 쓰기 때문에
-    /// 전부 더하면 같은 저장 공간을 두 번 세고, 꽂아둔 DMG 까지 섞인다.
+    /// Look at the boot volume only. Under APFS several volumes share one
+    /// container, so adding them all up counts the same storage twice - and
+    /// drags in any mounted DMG as well.
     fn disk_capacity(&mut self) -> f32 {
         if self.cap_tick == 0 {
             self.disks.refresh(false);

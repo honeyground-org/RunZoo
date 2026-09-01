@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""RunZoo 동물 스프라이트 생성기.
+"""RunZoo animal sprite generator.
 
-40x36 알파 실루엣을 동물별로 8프레임씩 뽑는다. macOS 템플릿 이미지로 쓰므로
-색은 전부 흰색이고 알파만 의미가 있다. 화면에는 20x18pt로 올라가서 레티나에서
-픽셀이 1:1로 떨어진다.
+Emits eight 40x36 alpha silhouettes per animal. Only the alpha channel carries
+meaning: every pixel is white, and the app either uses that as a macOS template
+image or recolours it at runtime. Drawn at 20x18pt on screen, so pixels land
+1:1 on a Retina display.
 """
 import math
 import os
@@ -16,7 +17,7 @@ FRAMES = 8
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "animals")
 
 
-# ---------------------------------------------------------------- PNG 쓰기
+# ---------------------------------------------------------------- PNG writing
 def write_png(path, w, h, get_rgba):
     rows = []
     for y in range(h):
@@ -38,7 +39,7 @@ def write_png(path, w, h, get_rgba):
         f.write(png)
 
 
-# ---------------------------------------------------------------- 그리기
+# ---------------------------------------------------------------- drawing
 class Canvas:
     def __init__(self, w=W, h=H):
         self.w, self.h = w, h
@@ -63,7 +64,7 @@ class Canvas:
                     self.set(x, y, v)
 
     def taper(self, x0, y0, x1, y1, w0, w1, v=1):
-        """굵기가 변하는 선. 다리·꼬리·코 전부 이걸로 그린다."""
+        """A stroke whose width changes along its length. Legs, tails and trunks are all this."""
         n = max(2, int(math.hypot(x1 - x0, y1 - y0) * 3))
         for i in range(n + 1):
             t = i / n
@@ -71,7 +72,7 @@ class Canvas:
                       w0 + (w1 - w0) * t, v)
 
     def curve(self, pts, w0, w1, v=1):
-        """점들을 잇는 부드러운 굵은 곡선."""
+        """A smooth thick curve through a list of points."""
         for i in range(len(pts) - 1):
             t0 = i / max(1, len(pts) - 1)
             t1 = (i + 1) / max(1, len(pts) - 1)
@@ -94,7 +95,7 @@ class Canvas:
 
 
 def foot(hipx, phase, reach, lift):
-    """달리는 발 하나의 궤적. 앞 절반은 땅을 밀고, 뒤 절반은 들어서 앞으로."""
+    """The path of one running foot: first half pushes along the ground, second half lifts and swings forward."""
     s = phase % 1.0
     if s < 0.5:
         u = s / 0.5
@@ -115,7 +116,7 @@ def eye(c, x, y, r=1.0):
     c.disc(x, y, r, 0)
 
 
-# ---------------------------------------------------------------- 동물들
+# ---------------------------------------------------------------- the animals
 def cat(c, t):
     bob = math.sin(2 * math.pi * t * 2) * 0.7
     by = 20 + bob
@@ -154,14 +155,14 @@ def rabbit(c, t):
     hop = -abs(math.sin(math.pi * t)) * 4.5
     by = 23 + hop
     tuck = math.sin(math.pi * t)
-    # 뒷다리는 크게, 앞다리는 가늘게 — 토끼는 뒷다리로 밀어서 뛴다
+    # Big hind leg, thin fore leg - a rabbit pushes off with the back
     c.taper(15, by + 1, 11 - tuck * 2.5, by + 6 - tuck * 4, 2.8, 1.7)
     c.disc(15, by + 1.5, 3.2)
     c.taper(23, by + 2, 26 + tuck * 2.5, by + 5 - tuck * 3, 1.5, 1.1)
-    c.disc(10, by - 2, 2.4)                       # 꼬리 뭉치
-    c.ellipse(17, by, 6.2, 4.6)                   # 엉덩이
-    c.ellipse(23, by - 1.5, 4.2, 3.6)             # 어깨
-    hx, hy = 28, by - 8                           # 머리를 몸통에서 확실히 띄운다
+    c.disc(10, by - 2, 2.4)                       # tail puff
+    c.ellipse(17, by, 6.2, 4.6)                   # haunches
+    c.ellipse(23, by - 1.5, 4.2, 3.6)             # shoulders
+    hx, hy = 28, by - 8                           # lift the head clear of the body
     c.taper(24, by - 3.5, hx - 1, hy + 1.5, 2.6, 2.2)
     c.disc(hx, hy, 3.5)
     lean = tuck * 2.2
@@ -175,7 +176,7 @@ def squirrel(c, t):
     bob = math.sin(2 * math.pi * t * 2) * 0.9
     by = 25 + bob
     sway = math.sin(2 * math.pi * t) * 1.2
-    # 꼬리는 속이 빈 큰 호로. 굵기를 호 반지름보다 작게 유지해야 구멍이 살아남는다
+    # The tail is a big hollow arc: keep the stroke thinner than the arc radius or the hole fills in
     c.curve([(15, by - 1), (9, by - 3), (5, by - 9),
              (7 + sway, by - 16), (13 + sway, by - 18), (18 + sway * 1.4, by - 16)],
             2.0, 3.2)
@@ -215,23 +216,23 @@ def chicken(c, t):
     bob = math.sin(2 * math.pi * t * 2) * 0.8
     by = 20 + bob
     peck = math.sin(2 * math.pi * t) * 1.0
-    # 다리 두 개를 확실히 분리하고 발가락을 붙인다
+    # Keep the two legs clearly apart and give each one a toe
     for hipx, ph in ((17, 0.0), (21, 0.5)):
         fx, fy = foot(hipx, t + ph, 3.2, 2.8)
         c.taper(hipx, by + 4, fx, fy, 1.4, 1.0)
         c.taper(fx - 1.4, fy, fx + 2.0, fy, 0.8, 0.8)
-    c.curve([(13, by - 3), (8, by - 6), (5, by - 9)], 2.0, 0.9)   # 꼬리깃
+    c.curve([(13, by - 3), (8, by - 6), (5, by - 9)], 2.0, 0.9)   # tail feathers
     c.curve([(13, by - 1), (7, by - 3), (4, by - 6)], 1.7, 0.8)
     c.ellipse(19, by, 6.6, 5.2)
-    c.ellipse(18.5, by + 0.5, 3.4, 2.4)                            # 날개
-    c.taper(24, by - 3.5, 27, by - 9 + peck, 2.5, 2.0)             # 목
+    c.ellipse(18.5, by + 0.5, 3.4, 2.4)                            # wing
+    c.taper(24, by - 3.5, 27, by - 9 + peck, 2.5, 2.0)             # neck
     hx, hy = 28, by - 10 + peck
     c.disc(hx, hy, 3.2)
-    c.disc(hx - 2.0, hy - 3.2, 1.3)                                # 볏 세 봉우리
+    c.disc(hx - 2.0, hy - 3.2, 1.3)                                # comb, three peaks
     c.disc(hx + 0.2, hy - 3.8, 1.4)
     c.disc(hx + 2.2, hy - 3.1, 1.3)
     c.poly([(hx + 2.0, hy - 0.9), (hx + 7.0, hy + 0.4), (hx + 2.0, hy + 1.7)])
-    c.disc(hx + 2.2, hy + 2.9, 1.3)                                # 육수
+    c.disc(hx + 2.2, hy + 2.9, 1.3)                                # wattle
     eye(c, hx + 0.9, hy - 0.6)
 
 
@@ -251,7 +252,7 @@ def rattlesnake(c, t):
         c.taper(hx + 5, hy, hx + 8.5, hy - 2.0 * flick, 0.7, 0.5)
         c.taper(hx + 5, hy, hx + 8.5, hy + 2.0 * flick, 0.7, 0.5)
     rx, ry = pts[0]
-    shake = math.sin(ph * 3) * 1.8                                 # 방울은 크게, 눈에 띄게
+    shake = math.sin(ph * 3) * 1.8                                 # the rattle shakes wide so it reads
     for i in range(3):
         c.ellipse(rx - 2.0 - i * 2.4, ry + shake * (i + 1) * 0.45,
                   1.7 + i * 0.4, 2.2 + i * 0.5)
@@ -264,7 +265,7 @@ ANIMALS = {
 }
 
 
-# ---------------------------------------------------------------- 실행
+# ---------------------------------------------------------------- run
 def render(fn, t):
     c = Canvas()
     fn(c, t)
@@ -283,9 +284,9 @@ def main():
             write_png(os.path.join(d, f"{name}_{i}.png"), W, H,
                       lambda x, y, c=c: (255, 255, 255, 255 * c.a[y][x]))
         sheets.append((name, row))
-        print(f"  {name}: {FRAMES}프레임")
+        print(f"  {name}: {FRAMES} frames")
 
-    # 눈으로 확인할 대조표: 어두운 메뉴바 위에 흰 실루엣을 얹은 모습
+    # Contact sheet for eyeballing: white silhouettes on a dark menu bar
     S, PAD = 5, 2
     cw, ch = (W + PAD) * FRAMES * S, (H + PAD) * len(sheets) * S
 
@@ -299,10 +300,10 @@ def main():
         return (38, 38, 44, 255)
 
     write_png(os.path.join(OUT, "_contact_sheet.png"), cw, ch, sheet_px)
-    print(f"\n대조표: {cw}x{ch}  (행 순서: " + ", ".join(n for n, _ in sheets) + ")")
+    print(f"\ncontact sheet: {cw}x{ch}  (row order: " + ", ".join(n for n, _ in sheets) + ")")
 
-    # 바이너리에 그대로 박아 넣을 프레임 표를 Rust 소스로 뽑는다
-    rs = ["// tools/gen_sprites.py 가 생성. 직접 고치지 말 것.",
+    # Emit the frame table as Rust source so the PNGs are baked into the binary
+    rs = ["// Generated by tools/gen_sprites.py. Do not edit by hand.",
           "pub static FRAMES: &[(&str, &[&[u8]])] = &["]
     for name, _ in sheets:
         rs.append(f'    ("{name}", &[')
@@ -312,7 +313,7 @@ def main():
     rs.append("];")
     out = os.path.join(os.path.dirname(__file__), "..", "src", "sprites.rs")
     open(out, "w").write("\n".join(rs) + "\n")
-    print("src/sprites.rs 갱신")
+    print("src/sprites.rs updated")
 
 
 if __name__ == "__main__":

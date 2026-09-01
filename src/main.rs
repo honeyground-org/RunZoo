@@ -1,11 +1,13 @@
-//! RunZoo — 메뉴바에서 동물이 시스템 부하만큼 빨리 달린다.
+//! RunZoo — an animal runs across the menu bar as fast as the system is busy,
+//! and wears the colour of how bad things are.
 //!
-//! RunCat365 (Takuto Nakamura, Apache-2.0) 의 아이디어에서 출발했다.
-//! 코드는 전부 새로 썼다. 원본은 Windows 전용이라 재사용할 수 있는 게 없었다.
+//! Started from the idea in RunCat365 (Takuto Nakamura, Apache-2.0). All of the
+//! code is new; the original is Windows-only, so there was nothing to reuse.
 mod animal;
 mod metrics;
 mod render;
 mod sprites;
+mod tint;
 
 use std::cell::RefCell;
 use std::process::Command;
@@ -14,31 +16,34 @@ use std::time::{Duration, Instant};
 use objc2::rc::Retained;
 use objc2::runtime::{NSObjectProtocol, ProtocolObject, Sel};
 use objc2::{
-    define_class, msg_send, sel, AllocAnyThread, DefinedClass, MainThreadMarker, MainThreadOnly,
+    define_class, msg_send, sel, DefinedClass, MainThreadMarker, MainThreadOnly,
 };
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSControlStateValueOff, NSControlStateValueOn,
     NSImage, NSMenu, NSMenuDelegate, NSMenuItem, NSStatusBar, NSStatusItem,
     NSVariableStatusItemLength,
 };
-use objc2_foundation::{
-    NSData, NSObject, NSRunLoop, NSRunLoopCommonModes, NSSize, NSString, NSTimer, NSUserDefaults,
-};
+use objc2_foundation::{NSObject, NSRunLoop, NSRunLoopCommonModes, NSString, NSTimer, NSUserDefaults};
 
 use animal::ANIMALS;
 use metrics::{Metrics, Source};
+use tint::{Rgb, PALETTE};
 
-/// 이 값을 이만큼 오래 넘고 있으면 과부하로 본다
+/// Stay above this for this long and we call it an overload
 const OVERLOAD_PERCENT: f32 = 85.0;
 const OVERLOAD_HOLD: Duration = Duration::from_secs(30);
-/// 여기 아래로 내려와야 경보를 푼다 (경계에서 알림이 떨리는 걸 막는다)
+/// Come back below this to clear the alarm (stops it chattering at the edge)
 const RECOVER_PERCENT: f32 = 70.0;
 
 const K_ANIMAL: &str = "animal";
 const K_SOURCE: &str = "source";
 const K_ALERT: &str = "alertEnabled";
+const K_ACCENT: &str = "accentColour";
+/// Read, never written: macOS puts "Dark" here in NSGlobalDomain, and the menu
+/// bar follows the same setting.
+const K_SYSTEM_APPEARANCE: &str = "AppleInterfaceStyle";
 
-// ---------------------------------------------------------------- 설정 저장
+// ---------------------------------------------------------------- preferences
 fn defaults() -> Retained<NSUserDefaults> {
     NSUserDefaults::standardUserDefaults()
 }
@@ -67,36 +72,85 @@ fn load_bool(key: &str, fallback: bool) -> bool {
     }
 }
 
-// ---------------------------------------------------------------- 상태
+/// Is the menu bar dark right now? It decides the calm end of the gradient:
+/// white on dark, black on light. (NSAppearance would answer this too, but the
+/// global default is the same answer with no extra AppKit surface.)
+fn menubar_is_dark() -> bool {
+    load_str(K_SYSTEM_APPEARANCE).is_some_and(|s| s.eq_ignore_ascii_case("dark"))
+}
+
+// ---------------------------------------------------------------- state
 struct App {
     metrics: Metrics,
     source: Source,
     animal: usize,
+    /// Coverage of each animation frame, decoded once per animal. Recolouring
+    /// is then a pixel loop over these rather than a PNG decode.
+    masks: Vec<Option<render::Mask>>,
     frames: Vec<Retained<NSImage>>,
     frame: usize,
     interval: f64,
     alert_on: bool,
     over_since: Option<Instant>,
     alerted: bool,
+    /// Index into tint::PALETTE
+    accent: usize,
+    /// The (appearance, severity step) the current frames were painted for
+    dark: bool,
+    level: u8,
 }
 
-/// 부하를 프레임 간격(ms)으로 바꾼다. 원본 RunCat 의 곡선을 따르되
-/// 동물마다 걸음 배속을 곱해서 코끼리는 느긋하고 다람쥐는 부산하게 만든다.
+impl App {
+    fn accent_rgb(&self) -> Option<Rgb> {
+        PALETTE[self.accent].rgb
+    }
+
+    /// The calm end of the gradient for the current appearance.
+    fn base(&self) -> Rgb {
+        tint::neutral(self.dark)
+    }
+
+    /// What the animal is painted in right now.
+    fn colour(&self) -> Rgb {
+        tint::level_colour(self.level, self.base(), self.accent_rgb())
+    }
+
+    /// What (appearance, severity step) the frames *should* be painted for.
+    /// Monochrome pins both, because in that mode macOS does the tinting.
+    fn wanted_paint(&self, dark: bool, load: f32) -> (bool, u8) {
+        if self.accent_rgb().is_some() {
+            (dark, tint::level(load))
+        } else {
+            (false, 0)
+        }
+    }
+}
+
+/// Turn load into a frame interval (ms). Follows the original RunCat curve,
+/// multiplied by each animal's gait so the elephant ambles and the squirrel
+/// fusses.
 fn interval_for(load: f32, tempo: f32) -> f64 {
     let speed = (load / 5.0).max(1.0) * tempo;
     (500.0 / speed as f64).clamp(33.0, 500.0)
 }
 
-fn load_frames(key: &str) -> Vec<Retained<NSImage>> {
-    animal::frames(key)
+fn load_masks(key: &str) -> Vec<Option<render::Mask>> {
+    animal::frames(key).iter().map(|png| render::alpha_mask(png)).collect()
+}
+
+/// Repaint every frame of the current animal in the current severity colour.
+fn build_frames(app: &App) -> Vec<Retained<NSImage>> {
+    let colour = app.colour();
+    // In monochrome the image stays a macOS template and the system tints it.
+    let template = app.accent_rgb().is_none();
+    animal::frames(ANIMALS[app.animal].key)
         .iter()
-        .map(|png| {
-            let data = NSData::with_bytes(png);
-            let img = NSImage::initWithData(NSImage::alloc(), &data).expect("스프라이트 디코드 실패");
-            // 40x36 픽셀을 20x18 포인트로 → 레티나에서 픽셀이 1:1 로 떨어진다
-            img.setSize(NSSize::new(20.0, 18.0));
-            img.setTemplate(true);
-            img
+        .zip(app.masks.iter())
+        .map(|(png, mask)| match mask {
+            Some(m) => render::sprite(m, colour, template),
+            // Mask unreadable: fall back to the plain template sprite. Colour is
+            // lost for that frame, the animal is not.
+            None => render::sprite_from_png(png),
         })
         .collect()
 }
@@ -115,7 +169,7 @@ fn notify(title: &str, body: &str) {
         .spawn();
 }
 
-// ---------------------------------------------------------------- 컨트롤러
+// ---------------------------------------------------------------- controller
 struct Ivars {
     item: Retained<NSStatusItem>,
     app: RefCell<App>,
@@ -132,7 +186,7 @@ define_class!(
     unsafe impl NSObjectProtocol for Controller {}
 
     unsafe impl NSMenuDelegate for Controller {
-        /// 메뉴가 열리기 직전마다 통째로 다시 짓는다. 항목이 스무 개 남짓이라 싸다.
+        /// Rebuild the whole menu just before it opens. Twenty-odd items is cheap.
         #[unsafe(method(menuNeedsUpdate:))]
         fn menu_needs_update(&self, menu: &NSMenu) {
             self.build_menu(menu);
@@ -164,7 +218,7 @@ define_class!(
             let changed = (want - app.interval).abs() > 1.0;
             app.interval = want;
 
-            // 과부하 감시: 오래 눌려 있을 때만 한 번 알린다
+            // Overload watch: alert once, and only after it has been held down
             let mut alarm: Option<(String, String)> = None;
             if app.alert_on {
                 if load >= OVERLOAD_PERCENT {
@@ -176,10 +230,10 @@ define_class!(
                             .top
                             .first()
                             .map(|p| format!("{} ({:.0}%)", p.name, p.cpu))
-                            .unwrap_or_else(|| "알 수 없음".into());
+                            .unwrap_or_else(|| "unknown".into());
                         alarm = Some((
-                            format!("{} 과부하 {:.0}%", app.source.label(), load),
-                            format!("30초 넘게 높습니다. 가장 많이 쓰는 건 {culprit}"),
+                            format!("{} overload {:.0}%", app.source.label(), load),
+                            format!("High for over 30 seconds. Biggest user: {culprit}"),
                         ));
                     }
                 } else if load < RECOVER_PERCENT {
@@ -189,6 +243,7 @@ define_class!(
             }
             drop(app);
 
+            self.repaint();
             if let Some((t, b)) = alarm {
                 notify(&t, &b);
             }
@@ -200,19 +255,14 @@ define_class!(
         #[unsafe(method(pickAnimal:))]
         fn pick_animal(&self, sender: &NSMenuItem) {
             let idx = sender.tag() as usize;
-            let iv = self.ivars();
             {
-                let mut app = iv.app.borrow_mut();
+                let mut app = self.ivars().app.borrow_mut();
                 app.animal = idx;
                 app.frame = 0;
-                app.frames = load_frames(ANIMALS[idx].key);
-                let img = app.frames[0].clone();
-                drop(app);
-                if let Some(btn) = iv.item.button(MainThreadMarker::from(self)) {
-                    btn.setImage(Some(&img));
-                }
+                app.masks = load_masks(ANIMALS[idx].key);
             }
             save_str(K_ANIMAL, ANIMALS[idx].key);
+            self.repaint_now();
             self.restart_animation();
         }
 
@@ -225,6 +275,16 @@ define_class!(
             app.alerted = false;
             drop(app);
             save_str(K_SOURCE, s.key());
+            // A different source usually means a different severity right away.
+            self.repaint();
+        }
+
+        #[unsafe(method(pickAccent:))]
+        fn pick_accent(&self, sender: &NSMenuItem) {
+            let idx = sender.tag() as usize;
+            self.ivars().app.borrow_mut().accent = idx;
+            save_str(K_ACCENT, PALETTE[idx].key);
+            self.repaint_now();
         }
 
         #[unsafe(method(toggleAlert:))]
@@ -251,8 +311,43 @@ impl Controller {
         unsafe { msg_send![super(this), init] }
     }
 
-    /// 프레임 간격이 바뀌면 타이머를 새로 건다. 공통 모드에 넣어야
-    /// 메뉴를 열어둔 동안에도 동물이 계속 달린다.
+    /// Repaint the animal if the severity step or the menu bar appearance moved.
+    /// Called once a second, so it must do nothing on the ticks where nothing
+    /// changed — which is most of them.
+    fn repaint(&self) {
+        self.paint(false);
+    }
+
+    /// Repaint no matter what. For when the animal or the colour was just picked.
+    fn repaint_now(&self) {
+        self.paint(true);
+    }
+
+    fn paint(&self, force: bool) {
+        let iv = self.ivars();
+        let mut app = iv.app.borrow_mut();
+        let dark = menubar_is_dark();
+        let load = app.metrics.latest(app.source);
+        let (want_dark, want_level) = app.wanted_paint(dark, load);
+        if !force && !app.frames.is_empty() && want_dark == app.dark && want_level == app.level {
+            return;
+        }
+        app.dark = want_dark;
+        app.level = want_level;
+        let frames = build_frames(&app);
+        app.frames = frames;
+        if app.frame >= app.frames.len() {
+            app.frame = 0;
+        }
+        let img = app.frames[app.frame].clone();
+        drop(app);
+        if let Some(btn) = iv.item.button(MainThreadMarker::from(self)) {
+            btn.setImage(Some(&img));
+        }
+    }
+
+    /// Re-arm the timer when the frame interval changes. It has to go in the
+    /// common modes or the animal freezes while the menu is open.
     fn restart_animation(&self) {
         let iv = self.ivars();
         if let Some(old) = iv.timer.borrow_mut().take() {
@@ -275,9 +370,11 @@ impl Controller {
     fn build_menu(&self, menu: &NSMenu) {
         let mtm = MainThreadMarker::from(self);
         let app = self.ivars().app.borrow();
+        let base = tint::neutral(menubar_is_dark());
+        let accent = app.accent_rgb();
         menu.removeAllItems();
 
-        menu.addItem(&header(mtm, "부하 (줄을 누르면 그 값이 동물 속도가 됩니다)"));
+        menu.addItem(&header(mtm, "Load — click a row to drive the animal"));
         for s in Source::ALL {
             if !app.metrics.available[s.idx()] {
                 continue;
@@ -285,7 +382,7 @@ impl Controller {
             let title = format!("{}   {}", s.label(), app.metrics.detail[s.idx()]);
             let it = item(mtm, &title, Some(sel!(pickSource:)), self);
             it.setTag(s.idx() as isize);
-            it.setImage(Some(&render::sparkline(&app.metrics.hist[s.idx()])));
+            it.setImage(Some(&render::sparkline(&app.metrics.hist[s.idx()], base, accent)));
             it.setState(if s == app.source {
                 NSControlStateValueOn
             } else {
@@ -295,9 +392,9 @@ impl Controller {
         }
 
         menu.addItem(&NSMenuItem::separatorItem(mtm));
-        menu.addItem(&header(mtm, "많이 쓰는 프로세스"));
+        menu.addItem(&header(mtm, "Top processes"));
         if app.metrics.top.is_empty() {
-            menu.addItem(&header(mtm, "   측정 중…"));
+            menu.addItem(&header(mtm, "   measuring…"));
         }
         for p in app.metrics.top.iter().take(5) {
             let mb = p.mem as f64 / 1024.0 / 1024.0;
@@ -320,11 +417,35 @@ impl Controller {
             });
             zoo.addItem(&it);
         }
-        let zoo_item = item(mtm, &format!("동물 — {}", ANIMALS[app.animal].label), None, self);
+        let zoo_item = item(mtm, &format!("Animal — {}", ANIMALS[app.animal].label), None, self);
         zoo_item.setSubmenu(Some(&zoo));
         menu.addItem(&zoo_item);
 
-        let alert = item(mtm, "과부하 알림", Some(sel!(toggleAlert:)), self);
+        // Colour palette. Every entry carries its own ramp, so you pick the
+        // gradient you can see rather than the name of a colour.
+        let colours = NSMenu::new(mtm);
+        colours.addItem(&header(mtm, "idle    →    overloaded"));
+        for (i, a) in PALETTE.iter().enumerate() {
+            let it = item(mtm, a.label, Some(sel!(pickAccent:)), self);
+            it.setTag(i as isize);
+            it.setImage(Some(&render::swatch(base, a.rgb)));
+            it.setState(if i == app.accent {
+                NSControlStateValueOn
+            } else {
+                NSControlStateValueOff
+            });
+            colours.addItem(&it);
+        }
+        let colour_item = item(
+            mtm,
+            &format!("Severity colour — {}", PALETTE[app.accent].label),
+            None,
+            self,
+        );
+        colour_item.setSubmenu(Some(&colours));
+        menu.addItem(&colour_item);
+
+        let alert = item(mtm, "Overload alert", Some(sel!(toggleAlert:)), self);
         alert.setState(if app.alert_on {
             NSControlStateValueOn
         } else {
@@ -333,7 +454,7 @@ impl Controller {
         menu.addItem(&alert);
 
         menu.addItem(&NSMenuItem::separatorItem(mtm));
-        menu.addItem(&item(mtm, "종료", Some(sel!(quit:)), self));
+        menu.addItem(&item(mtm, "Quit", Some(sel!(quit:)), self));
     }
 }
 
@@ -357,7 +478,7 @@ fn item(
     it
 }
 
-/// 누를 수 없는 설명 줄
+/// A caption row you cannot click
 fn header(mtm: MainThreadMarker, title: &str) -> Retained<NSMenuItem> {
     let it = unsafe {
         NSMenuItem::initWithTitle_action_keyEquivalent(
@@ -371,28 +492,91 @@ fn header(mtm: MainThreadMarker, title: &str) -> Retained<NSMenuItem> {
     it
 }
 
+fn new_app(source: Source, animal_idx: usize, accent: usize, metrics: Metrics) -> App {
+    App {
+        metrics,
+        source,
+        animal: animal_idx,
+        masks: load_masks(ANIMALS[animal_idx].key),
+        frames: Vec::new(),
+        frame: 0,
+        interval: 500.0,
+        alert_on: load_bool(K_ALERT, true),
+        over_since: None,
+        alerted: false,
+        accent,
+        dark: menubar_is_dark(),
+        level: 0,
+    }
+}
+
+// ---------------------------------------------------------------- dev flags
 fn probe() {
     let mut m = Metrics::new();
-    println!("1초 간격으로 재서 찍습니다 (앞 두 번은 예열이라 처리량이 0)");
+    println!("sampling once a second (the first two rounds are warm-up, so throughput reads 0)");
     let n: u32 = std::env::args().nth(2).and_then(|s| s.parse().ok()).unwrap_or(2);
+    let dark = menubar_is_dark();
+    let base = tint::neutral(dark);
+    let accent = PALETTE[tint::accent_index(
+        &load_str(K_ACCENT).unwrap_or_else(|| tint::DEFAULT_ACCENT.into()),
+    )]
+    .rgb;
     for round in 1..=n {
         std::thread::sleep(Duration::from_secs(1));
         m.refresh();
-        println!("\n--- {round}회차 ---");
+        println!("\n--- round {round} ---");
         for s in Source::ALL {
             let mark = if m.available[s.idx()] { " " } else { "x" };
-            println!("{mark} {:<8} {:>6.1}%   {}", s.label(), m.latest(s), m.detail[s.idx()]);
+            let v = m.latest(s);
+            println!(
+                "{mark} {:<8} {:>6.1}%   sev {:>4.0}%  {}   {}",
+                s.label(),
+                v,
+                tint::severity(v) * 100.0,
+                tint::colour_for(v, base, accent).hex(),
+                m.detail[s.idx()]
+            );
         }
-        println!("  상위 프로세스:");
+        println!("  top processes:");
         for p in m.top.iter().take(3) {
             println!("    {:<24} {:>5.1}%  {:>6.0} MB", p.name, p.cpu, p.mem as f64 / 1048576.0);
         }
         let tempo = ANIMALS[0].tempo;
-        println!("  → CPU 기준 프레임 간격: {:.0}ms", interval_for(m.latest(Source::Cpu), tempo));
+        println!("  → frame interval on CPU: {:.0}ms", interval_for(m.latest(Source::Cpu), tempo));
     }
 }
 
-/// 메뉴를 실제로 조립해서 그대로 찍는다. 클릭 없이 메뉴 구성을 검증하려고 둔다.
+/// Print the whole colour ramp. Lets the gradient be checked without ever
+/// opening the menu — or even having a menu bar.
+fn dump_tint() {
+    let steps = [0.0f32, 10.0, 25.0, 40.0, 50.0, 60.0, 70.0, 85.0, 95.0, 100.0];
+    for dark in [true, false] {
+        let base = tint::neutral(dark);
+        println!(
+            "\nmenu bar: {}   (calm end = {})",
+            if dark { "dark" } else { "light" },
+            base.hex()
+        );
+        print!("{:<12}", "load %");
+        for s in steps {
+            print!("{:>9.0}", s);
+        }
+        println!();
+        for a in PALETTE {
+            print!("{:<12}", a.label);
+            for s in steps {
+                print!("{:>9}", tint::colour_for(s, base, a.rgb).hex());
+            }
+            println!();
+        }
+    }
+    println!(
+        "\nseverity(load) = (load/100)^1.6, quantised to {} steps for redraw",
+        tint::LEVELS
+    );
+}
+
+/// Build the menu for real and print it. Verifies the structure without a click.
 fn dump_menu(mtm: MainThreadMarker) {
     let bar = NSStatusBar::systemStatusBar();
     let item_ = bar.statusItemWithLength(NSVariableStatusItemLength);
@@ -401,24 +585,18 @@ fn dump_menu(mtm: MainThreadMarker) {
         std::thread::sleep(Duration::from_millis(1100));
         metrics.refresh();
     }
+    let accent = tint::accent_index(
+        &load_str(K_ACCENT).unwrap_or_else(|| tint::DEFAULT_ACCENT.into()),
+    );
     let ctrl = Controller::new(
         mtm,
         Ivars {
             item: item_.clone(),
-            app: RefCell::new(App {
-                metrics,
-                source: Source::Cpu,
-                animal: 0,
-                frames: load_frames("cat"),
-                frame: 0,
-                interval: 500.0,
-                alert_on: true,
-                over_since: None,
-                alerted: false,
-            }),
+            app: RefCell::new(new_app(Source::Cpu, 0, accent, metrics)),
             timer: RefCell::new(None),
         },
     );
+    ctrl.repaint_now();
     let menu = NSMenu::new(mtm);
     ctrl.build_menu(&menu);
 
@@ -427,7 +605,7 @@ fn dump_menu(mtm: MainThreadMarker) {
             let it = menu.itemAtIndex(i).unwrap();
             let mark = if it.state() == NSControlStateValueOn { "[v]" }
                        else if !it.isEnabled() { "   " } else { "[ ]" };
-            let img = if it.image().is_some() { " 〔그래프〕" } else { "" };
+            let img = if it.image().is_some() { " [image]" } else { "" };
             let title = it.title().to_string();
             let title = if title.is_empty() { "────────".into() } else { title };
             println!("{}{mark} {title}{img}", "  ".repeat(indent + 1));
@@ -436,91 +614,157 @@ fn dump_menu(mtm: MainThreadMarker) {
             }
         }
     }
-    println!("메뉴 구성:");
+    println!("menu:");
     walk(&menu, 0);
 
-    // 스파크라인을 눈으로 확인하려고 원시 픽셀을 떨군다
     let app = ctrl.ivars().app.borrow();
+    println!(
+        "\npainting: accent {} · menu bar {} · severity step {}/{} · animal {}",
+        PALETTE[app.accent].label,
+        if app.dark { "dark" } else { "light" },
+        app.level,
+        tint::LEVELS - 1,
+        app.colour().hex()
+    );
+
+    // Dump raw pixels so the sparklines can be looked at
+    let base = app.base();
+    let accent = app.accent_rgb();
     let mut raw = Vec::new();
     for s in Source::ALL {
-        raw.extend_from_slice(&render::sparkline_buffer(&app.metrics.hist[s.idx()]));
+        raw.extend_from_slice(&render::sparkline_buffer(&app.metrics.hist[s.idx()], base, accent));
     }
     std::fs::write("/tmp/runzoo_spark.raw", &raw).unwrap();
-    println!("\n스파크라인 원시 픽셀 → /tmp/runzoo_spark.raw (120x28 RGBA {}장)", Source::ALL.len());
+    println!(
+        "sparkline pixels → /tmp/runzoo_spark.raw (120x28 RGBA, {} of them)",
+        Source::ALL.len()
+    );
+    println!("view with: python3 tools/raw_to_png.py /tmp/runzoo_spark.raw 120 28");
 }
 
-/// 60초치가 다 찬 스파크라인이 어떻게 보이는지 합성 데이터로 확인한다.
+/// What a full 60 seconds looks like, drawn from synthetic data.
 fn dump_spark_demo() {
     use std::collections::VecDeque;
-    let shapes: [(&str, fn(usize) -> f32); 4] = [
-        ("톱니 (부하가 오르내림)", |i| ((i as f32 * 0.35).sin() * 0.5 + 0.5) * 90.0 + 5.0),
-        ("계단 (한 번 뛰고 유지)", |i| if i < 30 { 15.0 } else { 78.0 }),
-        ("뾰족 (짧은 폭주)", |i| if i % 17 == 0 { 95.0 } else { 8.0 }),
-        ("포화 (계속 100%)", |_| 100.0),
+    /// A named synthetic load curve
+    type Shape = (&'static str, fn(usize) -> f32);
+    let shapes: [Shape; 4] = [
+        ("sawtooth (load rising and falling)", |i| ((i as f32 * 0.35).sin() * 0.5 + 0.5) * 90.0 + 5.0),
+        ("step (one jump, then held)", |i| if i < 30 { 15.0 } else { 78.0 }),
+        ("spikes (short bursts)", |i| if i % 17 == 0 { 95.0 } else { 8.0 }),
+        ("saturated (pinned at 100%)", |_| 100.0),
     ];
+    let dark = menubar_is_dark();
+    let base = tint::neutral(dark);
+    let accent = PALETTE[tint::accent_index(
+        &load_str(K_ACCENT).unwrap_or_else(|| tint::DEFAULT_ACCENT.into()),
+    )]
+    .rgb;
     let mut raw = Vec::new();
     for (name, f) in shapes {
         println!("  {name}");
         let h: VecDeque<f32> = (0..metrics::HISTORY).map(f).collect();
-        raw.extend_from_slice(&render::sparkline_buffer(&h));
+        raw.extend_from_slice(&render::sparkline_buffer(&h, base, accent));
     }
     std::fs::write("/tmp/runzoo_spark.raw", &raw).unwrap();
+    println!("→ /tmp/runzoo_spark.raw (120x28 RGBA x4)");
+    println!("view with: python3 tools/raw_to_png.py /tmp/runzoo_spark.raw 120 28");
+}
+
+/// Every animal, every frame, painted across the severity ramp. This is how the
+/// colour work gets checked: one picture instead of staring at the menu bar.
+fn dump_sprites() {
+    let dark = menubar_is_dark();
+    let base = tint::neutral(dark);
+    let accent = PALETTE[tint::accent_index(
+        &load_str(K_ACCENT).unwrap_or_else(|| tint::DEFAULT_ACCENT.into()),
+    )]
+    .rgb;
+    let loads = [0.0f32, 25.0, 50.0, 70.0, 85.0, 100.0];
+    let mut raw = Vec::new();
+    let mut rows = 0;
+    for a in ANIMALS {
+        let masks = load_masks(a.key);
+        let Some(Some(m)) = masks.first() else {
+            println!("  {}: mask unreadable", a.key);
+            continue;
+        };
+        // One row per animal: the same frame at rising severity, side by side.
+        for y in 0..m.h {
+            for load in loads {
+                let c = tint::colour_for(load, base, accent);
+                for x in 0..m.w {
+                    let al = m.a[y * m.w + x];
+                    let mul = |v: u8| ((v as u16 * al as u16) / 255) as u8;
+                    raw.extend_from_slice(&[mul(c.0), mul(c.1), mul(c.2), al]);
+                }
+            }
+        }
+        rows += 1;
+        println!("  {}: {}", a.key, loads.map(|l| tint::colour_for(l, base, accent).hex()).join(" "));
+    }
+    std::fs::write("/tmp/runzoo_sprites.raw", &raw).unwrap();
+    let w = 40 * loads.len();
+    println!("\nloads across each row: {loads:?}");
+    println!("→ /tmp/runzoo_sprites.raw ({w}x{} RGBA)", 36 * rows);
+    println!("view with: python3 tools/raw_to_png.py /tmp/runzoo_sprites.raw {w} {}", 36 * rows);
 }
 
 fn main() {
-    if std::env::args().any(|a| a == "--dump-spark-demo") {
+    let args: Vec<String> = std::env::args().collect();
+    let has = |f: &str| args.iter().any(|a| a == f);
+
+    if has("--dump-tint") {
+        dump_tint();
+        return;
+    }
+    if has("--dump-spark-demo") {
         dump_spark_demo();
         return;
     }
-    if std::env::args().any(|a| a == "--dump-menu") {
-        let mtm = MainThreadMarker::new().expect("메인 스레드에서 시작해야 한다");
+    if has("--dump-sprites") {
+        // Needs AppKit for the PNG decoder, but no window and no run loop.
+        let _ = MainThreadMarker::new().expect("must be started on the main thread");
+        dump_sprites();
+        return;
+    }
+    if has("--dump-menu") {
+        let mtm = MainThreadMarker::new().expect("must be started on the main thread");
         let app_ns = NSApplication::sharedApplication(mtm);
         app_ns.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
         dump_menu(mtm);
         return;
     }
-    if std::env::args().any(|a| a == "--probe") {
+    if has("--probe") {
         probe();
         return;
     }
-    let mtm = MainThreadMarker::new().expect("메인 스레드에서 시작해야 한다");
+    let mtm = MainThreadMarker::new().expect("must be started on the main thread");
     let app_ns = NSApplication::sharedApplication(mtm);
-    // Accessory = Dock 에 뜨지 않고 메뉴바에만 산다
+    // Accessory = no Dock icon, lives in the menu bar only
     app_ns.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
 
     let animal_idx = animal::index_of(&load_str(K_ANIMAL).unwrap_or_else(|| "cat".into()));
     let source = load_str(K_SOURCE)
         .and_then(|k| Source::from_key(&k))
         .unwrap_or(Source::Cpu);
+    let accent = tint::accent_index(
+        &load_str(K_ACCENT).unwrap_or_else(|| tint::DEFAULT_ACCENT.into()),
+    );
 
     let bar = NSStatusBar::systemStatusBar();
-    // 가변 길이여야 한다. 고정 길이로 두면 매 프레임 이미지를 틀에 맞추느라
-    // 40fps 기준 CPU 가 8% -> 26% 로 뛴다 (번갈아 3회씩 실측).
+    // Must be variable length. Fixed length makes macOS fit every frame to the
+    // slot, which took CPU from 8% to 26% at 40fps (measured, alternating x3).
     let item_ = bar.statusItemWithLength(NSVariableStatusItemLength);
-    let frames = load_frames(ANIMALS[animal_idx].key);
-    if let Some(btn) = item_.button(mtm) {
-        btn.setImage(Some(&frames[0]));
-    }
 
-    let state = App {
-        metrics: Metrics::new(),
-        source,
-        animal: animal_idx,
-        frames,
-        frame: 0,
-        interval: 500.0,
-        alert_on: load_bool(K_ALERT, true),
-        over_since: None,
-        alerted: false,
-    };
     let ctrl = Controller::new(
         mtm,
         Ivars {
             item: item_.clone(),
-            app: RefCell::new(state),
+            app: RefCell::new(new_app(source, animal_idx, accent, Metrics::new())),
             timer: RefCell::new(None),
         },
     );
+    ctrl.repaint_now();
 
     let menu = NSMenu::new(mtm);
     menu.setDelegate(Some(ProtocolObject::from_ref(&*ctrl)));
@@ -531,7 +775,7 @@ fn main() {
     let fetch = unsafe {
         NSTimer::timerWithTimeInterval_target_selector_userInfo_repeats(
             1.0,
-            &*ctrl,
+            &ctrl,
             sel!(fetch:),
             None,
             true,

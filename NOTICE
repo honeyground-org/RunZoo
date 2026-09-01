@@ -2,31 +2,31 @@ RunZoo
 ======
 
 Copyright 2026 Sean (github.com/wangjacsi)
-Licensed under the Apache License, Version 2.0 (LICENSE 참고)
+Licensed under the Apache License, Version 2.0 (see LICENSE)
 
-이 프로젝트는 RunCat365 에서 아이디어를 얻었습니다.
+This project took its idea from RunCat365.
 
     RunCat365
     Copyright 2025 Takuto Nakamura
     https://github.com/runcat-dev/RunCat365
     Licensed under the Apache License, Version 2.0
 
-가져온 것과 가져오지 않은 것을 분명히 해 둡니다.
+Let us be precise about what was taken and what was not.
 
-  가져온 것 : "시스템 부하에 비례해 메뉴바 동물의 걸음이 빨라진다"는 발상과,
-              부하를 프레임 간격으로 바꾸는 계산식의 모양
-              (interval = 500 / max(1, load/5)).
+  Taken     : the idea that "a menu bar animal runs faster the busier the
+              system is", and the shape of the formula that turns load into
+              a frame interval (interval = 500 / max(1, load/5)).
 
-  안 가져온 것 : 코드와 그림 전부. RunCat365 는 Windows WinForms 앱이고
-              측정 계층이 Windows 전용 PerformanceCounter 위에 서 있어서
-              macOS 에서는 재사용할 수 있는 부분이 없었습니다.
-              동물 스프라이트도 전부 새로 그렸습니다 (tools/gen_sprites.py).
+  Not taken : any code or artwork. RunCat365 is a Windows WinForms app whose
+              measurement layer sits on Windows-only PerformanceCounter, so
+              there was nothing reusable on macOS. Every animal sprite was
+              drawn from scratch (tools/gen_sprites.py).
 
-아래는 의무가 아니라 예의로 적습니다. RunCat365 에는 NOTICE 파일이 없고,
-저작권은 아이디어나 수식이 아니라 그 표현을 보호하므로 Apache 2.0 제4조의
-재배포 의무는 RunZoo 에 걸리지 않습니다. 남의 발상에서 출발했으면 밝히는 게
-맞아서 적어 둡니다.
+What follows is courtesy, not obligation. RunCat365 ships no NOTICE file, and
+copyright protects expression rather than ideas or formulas, so the
+redistribution duties of Apache 2.0 section 4 do not attach to RunZoo. We
+write it down because when you start from someone else's idea, you say so.
 
-Apache 2.0 제6조에 따라 이 라이선스는 상표권을 주지 않습니다.
-"RunCat" 이라는 이름과 로고는 원저작자의 것이며, RunZoo 는 그것을 쓰지 않고
-원저작자의 보증이나 추천을 받은 바 없습니다.
+Per Apache 2.0 section 6, this licence grants no trademark rights. The name
+and logo "RunCat" belong to the original author; RunZoo does not use them and
+carries no endorsement from that author.
