@@ -1,8 +1,8 @@
 /target
 /dist
-# 참고용 원본 저장소. 우리 저장소에 들고 다닐 필요는 없다.
-# 다시 받으려면: git clone --depth 1 https://github.com/runcat-dev/RunCat365 reference/RunCat365
+# Upstream repo kept for reference only. No need to carry it in ours.
+# To fetch it again: git clone --depth 1 https://github.com/runcat-dev/RunCat365 reference/RunCat365
 /reference
-# bundle.sh 가 gen_icon.py + iconutil 로 매번 다시 만든다
+# bundle.sh regenerates these every time via gen_icon.py + iconutil
 /assets/AppIcon.iconset
 /assets/AppIcon.icns

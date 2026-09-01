@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RunZoo 앱 아이콘. 둥근 사각형 위에 동물 실루엣을 픽셀 그대로 확대해 올린다."""
+"""RunZoo app icon: an animal silhouette scaled up pixel-for-pixel on a rounded square."""
 import os
 import sys
 
@@ -8,14 +8,14 @@ from gen_sprites import W, H, Canvas, cat, write_png  # noqa: E402
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "AppIcon.iconset")
 SIZES = [16, 32, 128, 256, 512]
-SS = 4  # 둥근 모서리를 매끄럽게 하려고 4배로 재서 평균낸다
+SS = 4  # supersample 4x and average, so the rounded corners come out smooth
 
 TOP = (0x2F, 0x7D, 0x5C)
 BOT = (0x10, 0x3D, 0x2A)
 
 
 def rounded_coverage(size, x, y, margin, radius):
-    """(x, y) 픽셀이 둥근 사각형 안에 얼마나 들어있는지 0~1 로."""
+    """How much of pixel (x, y) falls inside the rounded square, as 0..1."""
     hit = 0
     lo, hi = margin, size - margin
     for sy in range(SS):
@@ -34,13 +34,13 @@ def rounded_coverage(size, x, y, margin, radius):
 def render(size):
     margin = size * 0.10
     radius = size * 0.225
-    # 동물은 픽셀 그림이라 정수배로 키워야 눈금이 흐트러지지 않는다
+    # The animal is pixel art, so only integer scaling keeps its grid intact
     scale = max(1, int((size * 0.62) // W))
     aw, ah = W * scale, H * scale
     ax, ay = (size - aw) // 2, (size - ah) // 2
 
     c = Canvas()
-    cat(c, 0.25)  # 네 발이 가장 벌어진 순간
+    cat(c, 0.25)  # the moment all four legs are at full stretch
 
     def px(x, y):
         cov = rounded_coverage(size, x, y, margin, radius)
