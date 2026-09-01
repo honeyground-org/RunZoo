@@ -118,7 +118,7 @@ with no visible difference. **An app that measures load must not create it.**
 
 | | |
 |---|---|
-| Bundle size | 548KB (461KB binary) |
+| Bundle size | 548KB for one architecture (461KB binary) · 1.0MB universal, 517KB zipped |
 | Memory | about 40MB resident |
 | Idle CPU | about 2.5% (1.35% measuring + 1.2% animating) |
 | CPU at full load | about 5.5% |
