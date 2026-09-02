@@ -390,6 +390,10 @@ fn run_command(cmd: Cmd) {
             sys::open_task_manager();
             return;
         }
+        Cmd::Support => {
+            sys::open_url(menu::SUPPORT_URL);
+            return;
+        }
         Cmd::Quit => {
             WIN.with(|w| {
                 if let Some(win) = w.borrow().as_ref() {
@@ -418,7 +422,7 @@ fn run_command(cmd: Cmd) {
                 win.repaint(true);
             }
             Cmd::ToggleAlert => win.app.toggle_alert(),
-            Cmd::OpenProcesses | Cmd::Quit => {}
+            Cmd::OpenProcesses | Cmd::Support | Cmd::Quit => {}
         }
     });
 }

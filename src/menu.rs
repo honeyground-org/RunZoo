@@ -10,6 +10,14 @@ use crate::state::App;
 use crate::sys;
 use crate::tint::PALETTE;
 
+/// Where "buy me a coffee" goes. A Stripe payment link: the customer picks the
+/// amount, five dollars to start, two at the least.
+///
+/// Empty would leave the row out entirely - a menu item that opens nothing is
+/// worse than no menu item - which is also how this was tested before the link
+/// existed.
+pub const SUPPORT_URL: &str = "https://buy.stripe.com/5kQfZg7p7dCX5bv9jy8bS00";
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Cmd {
     PickSource(usize),
@@ -17,6 +25,7 @@ pub enum Cmd {
     PickAccent(usize),
     OpenProcesses,
     ToggleAlert,
+    Support,
     Quit,
 }
 
@@ -32,6 +41,7 @@ impl Cmd {
             Cmd::OpenProcesses => 4001,
             Cmd::ToggleAlert => 4002,
             Cmd::Quit => 4003,
+            Cmd::Support => 4004,
         }
     }
 
@@ -43,6 +53,7 @@ impl Cmd {
             4001 => Some(Cmd::OpenProcesses),
             4002 => Some(Cmd::ToggleAlert),
             4003 => Some(Cmd::Quit),
+            4004 => Some(Cmd::Support),
             _ => None,
         }
     }
@@ -194,6 +205,16 @@ pub fn build(app: &App) -> Vec<Node> {
         lead: false,
         art: None,
     });
+
+    if !SUPPORT_URL.is_empty() {
+        out.push(Node::Row {
+            cells: Cells::plain("Buy me a coffee"),
+            cmd: Cmd::Support,
+            checked: false,
+            lead: false,
+            art: None,
+        });
+    }
 
     out.push(Node::Separator);
     out.push(Node::Row {

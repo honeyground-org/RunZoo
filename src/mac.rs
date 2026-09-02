@@ -263,6 +263,7 @@ define_class!(
                 }
                 Cmd::ToggleAlert => self.ivars().app.borrow_mut().toggle_alert(),
                 Cmd::OpenProcesses => sys::open_task_manager(),
+                Cmd::Support => sys::open_url(menu::SUPPORT_URL),
                 Cmd::Quit => {
                     NSApplication::sharedApplication(MainThreadMarker::from(self)).terminate(None)
                 }

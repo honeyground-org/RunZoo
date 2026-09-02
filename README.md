@@ -281,6 +281,12 @@ python3 tools/raw_to_png.py /tmp/runzoo_spark.raw 120 28 --bg=light --scale=3
 checkerboard tells you the pixels are there; a dump on `--bg=light` tells you
 whether a human could see them.
 
+## Buy me a coffee
+
+RunZoo is free and always will be. If it has earned its place in your menu bar,
+[**buy me a coffee**](https://buy.stripe.com/5kQfZg7p7dCX5bv9jy8bS00) — you choose the amount, five dollars to
+start with. It is in the app's own menu too, under the overload alert.
+
 ## Credit
 
 Started from the idea in RunCat365 (Takuto Nakamura, Apache-2.0). What was taken
