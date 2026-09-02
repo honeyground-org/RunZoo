@@ -55,11 +55,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           NOTES=$(cat <<'MD'
+          ## Download
+
+          | | |
+          |---|---|
+          | **macOS** | [RunZoo.zip](https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo.zip) — Apple silicon and Intel |
+          | **Windows** | [RunZoo-windows-x64.zip](https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo-windows-x64.zip) — 64-bit |
+
+          (Or from the Assets list at the bottom of this page, which is pinned
+          to this version rather than the newest one.)
+
           ## Install
 
-          **macOS** — download `RunZoo.zip`, unzip, drag **RunZoo.app** to
-          Applications. First launch only: the build is ad-hoc signed rather
-          than notarised, so macOS quarantines the download.
+          **macOS** — unzip, drag **RunZoo.app** to Applications. First launch
+          only: the build is ad-hoc signed rather than notarised, so macOS
+          quarantines the download.
 
           ```sh
           xattr -dr com.apple.quarantine /Applications/RunZoo.app
@@ -68,10 +78,9 @@ jobs:
 
           Universal: Apple silicon and Intel.
 
-          **Windows** — download `RunZoo-windows-x64.zip`, unzip, run
-          `runzoo.exe`. The animal appears in the notification area; right-click
-          it for the dashboard. It is unsigned, so SmartScreen will ask once
-          (More info → Run anyway).
+          **Windows** — unzip, run `runzoo.exe`. The animal appears in the
+          notification area; right-click it for the dashboard. It is unsigned,
+          so SmartScreen will ask once (More info → Run anyway).
 
           No Rust, no toolchain, nothing else to install. Prefer to build it
           yourself? On a Mac, `./tools/install.sh` does the whole thing,

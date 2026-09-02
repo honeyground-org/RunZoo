@@ -8,26 +8,34 @@ sprints in red.
 
 macOS and Windows · Rust · minimal dependencies · 564KB bundle
 
+## Download
+
+| | | |
+|---|---|---|
+| **macOS** | [**Download RunZoo.zip**](https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo.zip) | Apple silicon and Intel · ~520KB |
+| **Windows** | [**Download RunZoo-windows-x64.zip**](https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo-windows-x64.zip) | 64-bit · ~190KB |
+
+Both links always give the newest build. Older versions, and what changed in
+each, are on the [releases page](https://github.com/wangjacsi/RunZoo/releases).
+
+No Rust, no toolchain, nothing else to install.
+
 ## Install
 
-**The quick way — no Rust, nothing to build.** From the
-[releases page](https://github.com/wangjacsi/RunZoo/releases):
-
-*macOS* — grab `RunZoo.zip`, unzip, drag `RunZoo.app` into Applications. The
-build is ad-hoc signed rather than notarised, so macOS quarantines the
-download; clear it once:
+*macOS* — unzip and drag `RunZoo.app` into Applications. The build is ad-hoc
+signed rather than notarised, so macOS quarantines the download; clear it once:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/RunZoo.app
 open /Applications/RunZoo.app
 ```
 
-*Windows* — grab `RunZoo-windows-x64.zip`, unzip, run `runzoo.exe`. The animal
-appears in the notification area; right-click it for the dashboard. It is
-unsigned, so SmartScreen asks once (More info → Run anyway). To start it with
-Windows, put a shortcut in `shell:startup`.
+*Windows* — unzip and run `runzoo.exe`. The animal appears in the notification
+area; right-click it for the dashboard. It is unsigned, so SmartScreen asks once
+(More info → Run anyway). To start it with Windows, put a shortcut in
+`shell:startup`.
 
-**From source, on a Mac with nothing installed yet.** One command. It installs
+**Or build it yourself, on a Mac with nothing installed yet.** One command. It installs
 the Xcode Command Line Tools and Rust if they are missing, builds, installs into
 `/Applications` and launches:
 
