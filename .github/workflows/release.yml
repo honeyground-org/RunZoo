@@ -1,6 +1,6 @@
-# Publishes a ready-to-run RunZoo.app so nobody needs Rust to use it.
-# Tag a commit (git tag v0.1.0 && git push --tags) and the zip lands on the
-# release page a few minutes later.
+# Publishes ready-to-run builds so nobody needs a toolchain to use RunZoo.
+# Tag a commit (git tag v0.2.0 && git push --tags) and the downloads land on
+# the release page a few minutes later.
 name: release
 
 on:
@@ -12,23 +12,44 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  macos:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v7
-
       - name: Build universal .app
         run: ./tools/bundle.sh --universal
-
       - name: Check the binary really is universal
         run: |
           lipo -archs dist/RunZoo.app/Contents/MacOS/RunZoo
           lipo -archs dist/RunZoo.app/Contents/MacOS/RunZoo | grep -q arm64
           lipo -archs dist/RunZoo.app/Contents/MacOS/RunZoo | grep -q x86_64
-
       - name: Zip
         run: ditto -c -k --keepParent dist/RunZoo.app RunZoo.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: RunZoo.zip
 
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: cargo build --release
+      - run: ./target/release/runzoo.exe --dump-tint
+      - name: Zip
+        run: Compress-Archive -Path target/release/runzoo.exe -DestinationPath RunZoo-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: RunZoo-windows-x64.zip
+
+  publish:
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -36,23 +57,30 @@ jobs:
           NOTES=$(cat <<'MD'
           ## Install
 
-          1. Download `RunZoo.zip`, unzip it, drag **RunZoo.app** to Applications.
-          2. First launch only — the app is ad-hoc signed, not notarised, so
-             macOS quarantines the download:
+          **macOS** — download `RunZoo.zip`, unzip, drag **RunZoo.app** to
+          Applications. First launch only: the build is ad-hoc signed rather
+          than notarised, so macOS quarantines the download.
 
           ```sh
           xattr -dr com.apple.quarantine /Applications/RunZoo.app
           open /Applications/RunZoo.app
           ```
 
-          No Rust, no Xcode, nothing else to install. Universal: Apple silicon
-          and Intel.
+          Universal: Apple silicon and Intel.
 
-          Prefer to build it yourself? `./tools/install.sh` does the whole thing,
+          **Windows** — download `RunZoo-windows-x64.zip`, unzip, run
+          `runzoo.exe`. The animal appears in the notification area; right-click
+          it for the dashboard. It is unsigned, so SmartScreen will ask once
+          (More info → Run anyway).
+
+          No Rust, no toolchain, nothing else to install. Prefer to build it
+          yourself? On a Mac, `./tools/install.sh` does the whole thing,
           including installing Rust if you do not have it.
           MD
           )
-          gh release create "${GITHUB_REF_NAME}" RunZoo.zip \
+          gh release create "${GITHUB_REF_NAME}" RunZoo.zip RunZoo-windows-x64.zip \
+            --repo "${GITHUB_REPOSITORY}" \
             --title "RunZoo ${GITHUB_REF_NAME}" \
             --notes "$NOTES" \
-            || gh release upload "${GITHUB_REF_NAME}" RunZoo.zip --clobber
+            || gh release upload "${GITHUB_REF_NAME}" RunZoo.zip RunZoo-windows-x64.zip \
+               --repo "${GITHUB_REPOSITORY}" --clobber
