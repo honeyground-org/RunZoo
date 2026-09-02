@@ -11,9 +11,18 @@ import os
 import struct
 import zlib
 
+# The animals are laid out in these units. Nothing below is in pixels.
 W, H = 40, 36
 GROUND = 31
 FRAMES = 8
+
+# How many pixels one drawing unit becomes. The menu bar is 22pt tall, and a
+# Retina point is two pixels, so 40 pixels of height is the most that fits with
+# a little air: 36 units x 10/9 = 40 pixels, drawn at 20pt. Change this and the
+# sprites grow together; SPRITE_PT in src/render.rs has to follow.
+SCALE = 10 / 9
+PW, PH = round(W * SCALE), round(H * SCALE)
+
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "animals")
 
 
@@ -41,35 +50,54 @@ def write_png(path, w, h, get_rgba):
 
 # ---------------------------------------------------------------- drawing
 class Canvas:
-    def __init__(self, w=W, h=H):
-        self.w, self.h = w, h
-        self.a = [[0] * w for _ in range(h)]
+    """Drawing surface. Every public method takes drawing units, not pixels.
 
-    def set(self, x, y, v=1):
+    Scaling happens on the way in, at the primitive that rasterises, so that a
+    filled shape stays filled: scaling inside set() instead would step through
+    the source grid and leave holes between the pixels it landed on.
+    """
+
+    def __init__(self, scale=SCALE):
+        self.s = scale
+        self.w, self.h = round(W * scale), round(H * scale)
+        self.a = [[0] * self.w for _ in range(self.h)]
+
+    # -- pixel space
+    def _put(self, x, y, v):
         x, y = int(round(x)), int(round(y))
         if 0 <= x < self.w and 0 <= y < self.h:
             self.a[y][x] = v
 
-    def disc(self, cx, cy, r, v=1):
+    def _disc_px(self, cx, cy, r, v):
         r2 = r * r
         for y in range(int(cy - r) - 1, int(cy + r) + 2):
             for x in range(int(cx - r) - 1, int(cx + r) + 2):
                 if (x - cx) ** 2 + (y - cy) ** 2 <= r2:
-                    self.set(x, y, v)
+                    self._put(x, y, v)
+
+    # -- drawing units
+    def set(self, x, y, v=1):
+        self._put(x * self.s, y * self.s, v)
+
+    def disc(self, cx, cy, r, v=1):
+        self._disc_px(cx * self.s, cy * self.s, r * self.s, v)
 
     def ellipse(self, cx, cy, rx, ry, v=1):
+        cx, cy, rx, ry = cx * self.s, cy * self.s, rx * self.s, ry * self.s
         for y in range(int(cy - ry) - 1, int(cy + ry) + 2):
             for x in range(int(cx - rx) - 1, int(cx + rx) + 2):
                 if ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1.0:
-                    self.set(x, y, v)
+                    self._put(x, y, v)
 
     def taper(self, x0, y0, x1, y1, w0, w1, v=1):
         """A stroke whose width changes along its length. Legs, tails and trunks are all this."""
+        s = self.s
+        x0, y0, x1, y1, w0, w1 = x0 * s, y0 * s, x1 * s, y1 * s, w0 * s, w1 * s
         n = max(2, int(math.hypot(x1 - x0, y1 - y0) * 3))
         for i in range(n + 1):
             t = i / n
-            self.disc(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t,
-                      w0 + (w1 - w0) * t, v)
+            self._disc_px(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t,
+                          w0 + (w1 - w0) * t, v)
 
     def curve(self, pts, w0, w1, v=1):
         """A smooth thick curve through a list of points."""
@@ -80,6 +108,7 @@ class Canvas:
                        w0 + (w1 - w0) * t0, w0 + (w1 - w0) * t1, v)
 
     def poly(self, pts, v=1):
+        pts = [(x * self.s, y * self.s) for x, y in pts]
         ys = [p[1] for p in pts]
         for y in range(int(min(ys)), int(max(ys)) + 1):
             xs = []
@@ -91,7 +120,7 @@ class Canvas:
             xs.sort()
             for i in range(0, len(xs) - 1, 2):
                 for x in range(int(math.floor(xs[i])), int(math.ceil(xs[i + 1])) + 1):
-                    self.set(x, y, v)
+                    self._put(x, y, v)
 
 
 def foot(hipx, phase, reach, lift):
@@ -265,6 +294,24 @@ ANIMALS = {
 }
 
 
+def write_mask(path, c):
+    """One bit per pixel, row-major, most significant bit first, 1 = ink.
+
+    The app used to read its sprites by handing the PNG to the system decoder,
+    which tied the sprite pipeline to one platform. A packed mask needs no
+    decoder at all: 44x40 comes to 220 bytes a frame, and unpacking it is three
+    lines. The PNGs stay for the contact sheet and for looking at.
+    """
+    bits = bytearray((c.w * c.h + 7) // 8)
+    for y in range(c.h):
+        for x in range(c.w):
+            if c.a[y][x]:
+                i = y * c.w + x
+                bits[i >> 3] |= 0x80 >> (i & 7)
+    with open(path, "wb") as f:
+        f.write(bits)
+
+
 # ---------------------------------------------------------------- run
 def render(fn, t):
     c = Canvas()
@@ -281,20 +328,21 @@ def main():
         for i in range(FRAMES):
             c = render(fn, i / FRAMES)
             row.append(c)
-            write_png(os.path.join(d, f"{name}_{i}.png"), W, H,
+            write_png(os.path.join(d, f"{name}_{i}.png"), PW, PH,
                       lambda x, y, c=c: (255, 255, 255, 255 * c.a[y][x]))
+            write_mask(os.path.join(d, f"{name}_{i}.mask"), c)
         sheets.append((name, row))
         print(f"  {name}: {FRAMES} frames")
 
     # Contact sheet for eyeballing: white silhouettes on a dark menu bar
     S, PAD = 5, 2
-    cw, ch = (W + PAD) * FRAMES * S, (H + PAD) * len(sheets) * S
+    cw, ch = (PW + PAD) * FRAMES * S, (PH + PAD) * len(sheets) * S
 
     def sheet_px(px, py):
-        col, row = px // ((W + PAD) * S), py // ((H + PAD) * S)
-        lx = px % ((W + PAD) * S) // S - PAD // 2
-        ly = py % ((H + PAD) * S) // S - PAD // 2
-        if row < len(sheets) and col < FRAMES and 0 <= lx < W and 0 <= ly < H:
+        col, row = px // ((PW + PAD) * S), py // ((PH + PAD) * S)
+        lx = px % ((PW + PAD) * S) // S - PAD // 2
+        ly = py % ((PH + PAD) * S) // S - PAD // 2
+        if row < len(sheets) and col < FRAMES and 0 <= lx < PW and 0 <= ly < PH:
             if sheets[row][1][col].a[ly][lx]:
                 return (255, 255, 255, 255)
         return (38, 38, 44, 255)
@@ -304,11 +352,18 @@ def main():
 
     # Emit the frame table as Rust source so the PNGs are baked into the binary
     rs = ["// Generated by tools/gen_sprites.py. Do not edit by hand.",
-          "pub static FRAMES: &[(&str, &[&[u8]])] = &["]
+          "",
+          "/// Sprite size in pixels. Drawn at half this in points, so that one",
+          "/// pixel lands on one pixel of a 2x display.",
+          f"pub const SPRITE_W: usize = {PW};",
+          f"pub const SPRITE_H: usize = {PH};",
+          "",
+          "/// One bit per pixel, row-major, most significant bit first, 1 = ink.",
+          "pub static MASKS: &[(&str, &[&[u8]])] = &["]
     for name, _ in sheets:
         rs.append(f'    ("{name}", &[')
         for i in range(FRAMES):
-            rs.append(f'        include_bytes!("../assets/animals/{name}/{name}_{i}.png"),')
+            rs.append(f'        include_bytes!("../assets/animals/{name}/{name}_{i}.mask"),')
         rs.append("    ]),")
     rs.append("];")
     out = os.path.join(os.path.dirname(__file__), "..", "src", "sprites.rs")

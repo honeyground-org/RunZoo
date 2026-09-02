@@ -3,18 +3,24 @@ name = "runzoo"
 version = "0.1.0"
 edition = "2021"
 
+# Measuring is the same everywhere; the front end is not.
 [dependencies]
 sysinfo = "0.39"
-objc2 = "0.6"
 starship-battery = "0.11.1"
 
-[dependencies.objc2-foundation]
-version = "0.3"
-features = ["NSString", "NSData", "NSTimer", "NSDate", "NSArray", "NSGeometry", "NSRunLoop", "NSUserDefaults", "NSThread", "NSProcessInfo"]
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
 
-[dependencies.objc2-app-kit]
+[target.'cfg(target_os = "macos")'.dependencies.objc2-foundation]
 version = "0.3"
-features = ["NSBitmapImageRep", "NSImageRep", "NSApplication", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSMenu", "NSMenuItem", "NSImage", "NSButton", "NSControl", "NSView", "NSResponder", "NSCell", "NSColor", "NSGraphics", "NSWorkspace", "NSRunningApplication"]
+features = ["NSString", "NSData", "NSTimer", "NSDate", "NSArray", "NSGeometry", "NSRunLoop", "NSUserDefaults", "NSThread", "NSProcessInfo", "NSAttributedString", "NSDictionary"]
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-app-kit]
+version = "0.3"
+features = ["NSBitmapImageRep", "NSImageRep", "NSApplication", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSMenu", "NSMenuItem", "NSImage", "NSButton", "NSControl", "NSView", "NSResponder", "NSCell", "NSColor", "NSGraphics", "NSWorkspace", "NSRunningApplication", "NSFont", "NSAttributedString", "NSParagraphStyle", "NSText"]
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_Console", "Win32_System_LibraryLoader", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 opt-level = "z"
