@@ -283,9 +283,17 @@ whether a human could see them.
 
 ## Buy me a coffee
 
+<img src="assets/readme/coffee.png" width="96" align="left" alt="A cup of coffee">
+
 RunZoo is free and always will be. If it has earned its place in your menu bar,
-[**buy me a coffee**](https://buy.stripe.com/5kQfZg7p7dCX5bv9jy8bS00) — you choose the amount, five dollars to
-start with. It is in the app's own menu too, under the overload alert.
+[**buy me a coffee**](https://buy.stripe.com/5kQfZg7p7dCX5bv9jy8bS00) — you
+choose the amount, five dollars to start with.
+
+The same cup is in the app's own menu, under the overload alert. It is drawn by
+the sprite generator like everything else here, so there is no stock icon in
+this repository.
+
+<br clear="left">
 
 ## Credit
 

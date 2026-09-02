@@ -67,6 +67,8 @@ pub enum Art {
     Spark(usize, Spark),
     /// the ramp a palette entry would paint with
     Swatch(usize),
+    /// the cup on the row that asks for one
+    Coffee,
 }
 
 /// A row's text: a label, then columns that hang off right-aligned stops.
@@ -212,7 +214,7 @@ pub fn build(app: &App) -> Vec<Node> {
             cmd: Cmd::Support,
             checked: false,
             lead: false,
-            art: None,
+            art: Some(Art::Coffee),
         });
     }
 

@@ -140,20 +140,25 @@ fn mask_bit(bits: &[u8], i: usize) -> bool {
     bits.get(i >> 3).is_some_and(|b| b & (0x80 >> (i & 7)) != 0)
 }
 
-/// One animation frame, painted in one flat colour.
+/// Any 1-bit mask, painted in one flat colour.
 ///
-/// The generator writes the frames as 1-bit masks precisely so this needs no
-/// image decoder: the sprite pipeline is the same three lines on every platform.
-pub fn sprite(mask: &[u8], c: Rgb) -> Buf {
-    let mut buf = Buf::new(SPRITE_W, SPRITE_H);
-    for y in 0..SPRITE_H {
-        for x in 0..SPRITE_W {
-            if mask_bit(mask, y * SPRITE_W + x) {
+/// The generator writes its artwork as masks precisely so this needs no image
+/// decoder: the pipeline is the same three lines on every platform.
+pub fn from_mask(mask: &[u8], w: usize, h: usize, c: Rgb) -> Buf {
+    let mut buf = Buf::new(w, h);
+    for y in 0..h {
+        for x in 0..w {
+            if mask_bit(mask, y * w + x) {
                 buf.put(x, y, c, 255);
             }
         }
     }
     buf
+}
+
+/// One animation frame of an animal.
+pub fn sprite(mask: &[u8], c: Rgb) -> Buf {
+    from_mask(mask, SPRITE_W, SPRITE_H, c)
 }
 
 // ---------------------------------------------------------------- sparklines
