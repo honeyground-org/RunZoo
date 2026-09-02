@@ -1,6 +1,6 @@
 //! The cast. Frame artwork is produced by tools/gen_sprites.py and baked into
-//! sprites.rs.
-use crate::sprites::FRAMES;
+//! sprites.rs as 1-bit masks.
+use crate::sprites::MASKS;
 
 pub struct Animal {
     pub key: &'static str,
@@ -23,6 +23,6 @@ pub fn index_of(key: &str) -> usize {
     ANIMALS.iter().position(|a| a.key == key).unwrap_or(0)
 }
 
-pub fn frames(key: &str) -> &'static [&'static [u8]] {
-    FRAMES.iter().find(|(k, _)| *k == key).map(|(_, f)| *f).unwrap_or(FRAMES[0].1)
+pub fn masks(key: &str) -> &'static [&'static [u8]] {
+    MASKS.iter().find(|(k, _)| *k == key).map(|(_, f)| *f).unwrap_or(MASKS[0].1)
 }

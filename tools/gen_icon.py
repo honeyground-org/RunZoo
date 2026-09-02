@@ -4,7 +4,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from gen_sprites import W, H, Canvas, cat, write_png  # noqa: E402
+from gen_sprites import PH, PW, Canvas, cat, write_png  # noqa: E402
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "AppIcon.iconset")
 SIZES = [16, 32, 128, 256, 512]
@@ -35,8 +35,8 @@ def render(size):
     margin = size * 0.10
     radius = size * 0.225
     # The animal is pixel art, so only integer scaling keeps its grid intact
-    scale = max(1, int((size * 0.62) // W))
-    aw, ah = W * scale, H * scale
+    scale = max(1, int((size * 0.62) // PW))
+    aw, ah = PW * scale, PH * scale
     ax, ay = (size - aw) // 2, (size - ah) // 2
 
     c = Canvas()
@@ -49,7 +49,7 @@ def render(size):
         t = y / size
         bg = tuple(int(TOP[i] + (BOT[i] - TOP[i]) * t) for i in range(3))
         ix, iy = (x - ax) // scale, (y - ay) // scale
-        if 0 <= ix < W and 0 <= iy < H and c.a[iy][ix]:
+        if 0 <= ix < PW and 0 <= iy < PH and c.a[iy][ix]:
             return (255, 255, 255, int(255 * cov))
         return (*bg, int(255 * cov))
 

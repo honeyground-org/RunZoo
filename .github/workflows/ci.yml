@@ -6,18 +6,37 @@ on:
   pull_request:
 
 jobs:
-  build:
+  macos:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v7
       - run: cargo fmt --check || true
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
-      # The sprite generator is the source of truth for src/sprites.rs.
-      # If regenerating changes anything, the checked-in file is stale.
+      # The sprites, src/sprites.rs and the README pictures are all generated.
+      # If regenerating changes anything, what is checked in is stale.
       - run: |
           python3 tools/gen_sprites.py > /dev/null
-          git diff --exit-code -- src/sprites.rs assets/animals
+          python3 tools/gen_readme_images.py > /dev/null
+          git diff --exit-code -- src/sprites.rs assets/
       - run: ./tools/bundle.sh
       # The colour ramp has to be checkable without a menu bar.
       - run: ./dist/RunZoo.app/Contents/MacOS/RunZoo --dump-tint
+      # The Windows front has to keep compiling from a Mac too, or it rots
+      # quietly between the times anyone builds it on Windows.
+      - run: rustup target add x86_64-pc-windows-msvc
+      - run: cargo clippy --target x86_64-pc-windows-msvc --all-targets -- -D warnings
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo build --release
+      # Links, starts, measures a real machine, and prints what it would draw.
+      # Not the same as someone watching the tray, but it is the part that can
+      # be checked without a person.
+      - run: ./target/release/runzoo.exe --dump-tint
+      - run: ./target/release/runzoo.exe --probe 2
+      - run: ./target/release/runzoo.exe --dump-menu
