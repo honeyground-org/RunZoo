@@ -15,7 +15,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from gen_sprites import ANIMALS, FRAMES, PH, PW, Canvas, write_png  # noqa: E402
+from gen_sprites import (  # noqa: E402
+    ANIMALS, COFFEE_H, COFFEE_W, FRAMES, PH, PW, Canvas, coffee, write_png,
+)
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "readme")
 
@@ -23,6 +25,8 @@ CALM = (255, 255, 255)
 RED = (0xFF, 0x3B, 0x30)
 # A dark chip so a white silhouette reads on both GitHub themes.
 CHIP = (38, 38, 44)
+# Warm enough to read as coffee rather than as another silhouette.
+BREW = (0xD6, 0xA1, 0x6B)
 # The blue a menu bar takes on over a desktop, near enough.
 BAR_LEFT = (0x1F, 0x62, 0x9E)
 BAR_RIGHT = (0x4C, 0x93, 0xC4)
@@ -129,6 +133,19 @@ def main():
         blit(w, h, cells, scale, lambda _x, _y: CHIP),
     )
     print(f"  gait.png               {w * scale}x{h * scale}  (all {FRAMES} frames of one stride)")
+
+    # 5. The cup, the same one the menu row carries.
+    cup = Canvas(1, COFFEE_W, COFFEE_H)
+    coffee(cup)
+    scale, pad = 6, 2
+    w, h = COFFEE_W + pad * 2, COFFEE_H + pad * 2
+    write_png(
+        os.path.join(OUT, "coffee.png"),
+        w * scale,
+        h * scale,
+        blit(w, h, [(cup, BREW, pad, pad)], scale, lambda _x, _y: CHIP),
+    )
+    print(f"  coffee.png             {w * scale}x{h * scale}  (the cup on the menu row)")
 
 
 if __name__ == "__main__":

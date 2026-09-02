@@ -20,8 +20,8 @@ use std::ffi::c_void;
 
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
-    CreateBitmap, CreateDIBSection, DeleteObject, GetDC, ReleaseDC, BITMAPINFO, BITMAPINFOHEADER,
-    BI_RGB, DIB_RGB_COLORS, HBITMAP,
+    CreateBitmap, CreateDIBSection, DeleteObject, GetDC, GetSysColor, ReleaseDC, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, COLOR_MENUTEXT, DIB_RGB_COLORS, HBITMAP,
 };
 use windows_sys::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -41,9 +41,10 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 use crate::draw::{self, Buf};
 use crate::menu::{self, Art, Cmd, Node};
+use crate::sprites;
 use crate::state::App;
 use crate::sys;
-use crate::tint::{self, PALETTE};
+use crate::tint::{self, Rgb, PALETTE};
 
 /// The tray tells us about clicks through a message of our own choosing.
 const WM_TRAY: u32 = WM_APP + 1;
@@ -289,6 +290,14 @@ fn art_bitmap(win: &Win, art: &Art) -> Option<HBITMAP> {
             draw::sparkline(&win.app.metrics.hist[*i], tint::CALM, accent, *g).scaled(60, 14)
         }
         Art::Swatch(i) => draw::swatch(tint::CALM, PALETTE[*i].rgb).scaled(30, 11),
+        // Painted in whatever this theme uses for menu text, so the cup reads
+        // the same way the words beside it do.
+        Art::Coffee => {
+            let v = unsafe { GetSysColor(COLOR_MENUTEXT) };
+            let ink = Rgb((v & 0xFF) as u8, ((v >> 8) & 0xFF) as u8, ((v >> 16) & 0xFF) as u8);
+            draw::from_mask(sprites::COFFEE, sprites::COFFEE_W, sprites::COFFEE_H, ink)
+                .scaled(16, 16)
+        }
     };
     let bmp = unsafe { dib(&buf) };
     if bmp.is_null() {

@@ -78,3 +78,9 @@ pub static MASKS: &[(&str, &[&[u8]])] = &[
         include_bytes!("../assets/animals/rattlesnake/rattlesnake_7.mask"),
     ]),
 ];
+
+pub const COFFEE_W: usize = 28;
+pub const COFFEE_H: usize = 28;
+
+/// The cup on the menu row that asks for one.
+pub static COFFEE: &[u8] = include_bytes!("../assets/ui/coffee.mask");

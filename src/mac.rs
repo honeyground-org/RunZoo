@@ -23,6 +23,7 @@ use objc2_foundation::{
 
 use crate::draw::{self, Buf};
 use crate::menu::{self, Art, Cells, Cmd, Node};
+use crate::sprites;
 use crate::state::App;
 use crate::sys;
 use crate::tint::{self, PALETTE};
@@ -90,6 +91,12 @@ fn art_image(app: &App, art: &Art) -> Retained<NSImage> {
             let rgb = PALETTE[*i].rgb;
             image(&draw::swatch(tint::CALM, rgb), rgb.is_none())
         }
+        // A template image: only the alpha survives, and macOS tints the cup
+        // to whatever the menu is using for text.
+        Art::Coffee => image(
+            &draw::from_mask(sprites::COFFEE, sprites::COFFEE_W, sprites::COFFEE_H, tint::CALM),
+            true,
+        ),
     }
 }
 

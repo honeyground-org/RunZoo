@@ -57,9 +57,9 @@ class Canvas:
     the source grid and leave holes between the pixels it landed on.
     """
 
-    def __init__(self, scale=SCALE):
+    def __init__(self, scale=SCALE, w=W, h=H):
         self.s = scale
-        self.w, self.h = round(W * scale), round(H * scale)
+        self.w, self.h = round(w * scale), round(h * scale)
         self.a = [[0] * self.w for _ in range(self.h)]
 
     # -- pixel space
@@ -288,6 +288,26 @@ def rattlesnake(c, t):
     eye(c, hx + 1.5, hy - 1.1, 0.9)
 
 
+# ---------------------------------------------------------------- other icons
+COFFEE_W, COFFEE_H = 28, 28
+
+
+def coffee(c):
+    """A cup, for the menu row that asks for one. Same primitives as the animals.
+
+    Read at 14pt, so it is a silhouette and not a drawing: no liquid line, no
+    thin detail. The handle is a ring punched out first and then covered by the
+    body, which is the only way its hole survives at this size.
+    """
+    c.ellipse(14, 23, 10.5, 1.6)                      # saucer
+    c.disc(21.0, 16.0, 4.4)                           # handle, outer
+    c.disc(21.0, 16.0, 2.4, 0)                        # handle, hole
+    c.poly([(6.5, 12), (20.5, 12), (18.5, 22), (8.5, 22)])   # body, over the ring
+    c.taper(6.0, 12.4, 21.0, 12.4, 1.4, 1.4)          # rim
+    for x0 in (11.0, 16.5):                           # steam
+        c.curve([(x0, 9.2), (x0 + 1.6, 7.0), (x0 - 1.2, 4.8), (x0 + 0.6, 2.6)], 1.1, 0.8)
+
+
 ANIMALS = {
     "cat": cat, "dog": dog, "rabbit": rabbit, "squirrel": squirrel,
     "elephant": elephant, "chicken": chicken, "rattlesnake": rattlesnake,
@@ -366,6 +386,22 @@ def main():
             rs.append(f'        include_bytes!("../assets/animals/{name}/{name}_{i}.mask"),')
         rs.append("    ]),")
     rs.append("];")
+    # The coffee cup is not an animal, so it gets its own size and its own mask.
+    ui = os.path.join(OUT, "..", "ui")
+    os.makedirs(ui, exist_ok=True)
+    cup = Canvas(1, COFFEE_W, COFFEE_H)
+    coffee(cup)
+    write_png(os.path.join(ui, "coffee.png"), COFFEE_W, COFFEE_H,
+              lambda x, y: (255, 255, 255, 255 * cup.a[y][x]))
+    write_mask(os.path.join(ui, "coffee.mask"), cup)
+    rs += ["",
+           f"pub const COFFEE_W: usize = {COFFEE_W};",
+           f"pub const COFFEE_H: usize = {COFFEE_H};",
+           "",
+           "/// The cup on the menu row that asks for one.",
+           'pub static COFFEE: &[u8] = include_bytes!("../assets/ui/coffee.mask");']
+    print(f"  coffee: {COFFEE_W}x{COFFEE_H}")
+
     out = os.path.join(os.path.dirname(__file__), "..", "src", "sprites.rs")
     open(out, "w").write("\n".join(rs) + "\n")
     print("src/sprites.rs updated")
