@@ -85,6 +85,122 @@ def menu_bar(path, cells_of, scale=3, gap=10, pad=12, height=48):
     return w * scale, height * scale
 
 
+# ---------------------------------------------------------------- buttons
+# A 5x7 pixel alphabet. Enough for a download button, and it keeps the buttons
+# in the same hand-assembled style as everything else here rather than dragging
+# in a font.
+GLYPHS = {
+    "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "B": ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
+    "C": ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+    "D": ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+    "E": ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+    "F": ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+    "G": ["01111", "10000", "10000", "10011", "10001", "10001", "01111"],
+    "H": ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "I": ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+    "L": ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+    "M": ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+    "N": ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+    "O": ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "P": ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+    "R": ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+    "S": ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+    "T": ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+    "U": ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "W": ["10001", "10001", "10001", "10101", "10101", "11011", "10001"],
+    "X": ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
+    "a": ["00000", "00000", "01110", "00001", "01111", "10001", "01111"],
+    "c": ["00000", "00000", "01111", "10000", "10000", "10000", "01111"],
+    "d": ["00001", "00001", "01111", "10001", "10001", "10001", "01111"],
+    "e": ["00000", "00000", "01110", "10001", "11111", "10000", "01110"],
+    "f": ["00110", "01000", "11110", "01000", "01000", "01000", "01000"],
+    "i": ["00100", "00000", "01100", "00100", "00100", "00100", "01110"],
+    "l": ["01100", "00100", "00100", "00100", "00100", "00100", "01110"],
+    "m": ["00000", "00000", "11010", "10101", "10101", "10101", "10101"],
+    "n": ["00000", "00000", "11110", "10001", "10001", "10001", "10001"],
+    "r": ["00000", "00000", "10110", "11001", "10000", "10000", "10000"],
+    "o": ["00000", "00000", "01110", "10001", "10001", "10001", "01110"],
+    "s": ["00000", "00000", "01111", "10000", "01110", "00001", "11110"],
+    "t": ["01000", "01000", "11110", "01000", "01000", "01001", "00110"],
+    "w": ["00000", "00000", "10001", "10001", "10101", "10101", "01010"],
+    "-": ["00000", "00000", "00000", "01110", "00000", "00000", "00000"],
+    "6": ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
+    "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+    " ": ["00000"] * 7,
+}
+GW, GH, GAP = 5, 7, 1
+
+
+def text_cells(msg, x, y, scale):
+    """A word as a list of (rect) blocks, in unscaled pixels.
+
+    A missing letter is an error rather than a space: the first attempt at these
+    buttons quietly read "Download fo   acOS" because m and r were not in the
+    alphabet yet, and a gap looks like kerning until you read it.
+    """
+    missing = sorted({c for c in msg if c not in GLYPHS})
+    if missing:
+        raise KeyError(f"no glyph for {missing} in {msg!r}")
+    out = []
+    for ch in msg:
+        g = GLYPHS[ch]
+        for gy, row in enumerate(g):
+            for gx, on in enumerate(row):
+                if on == "1":
+                    out.append((x + gx * scale, y + gy * scale, scale, scale))
+        x += (GW + GAP) * scale
+    return out
+
+
+def text_width(msg, scale):
+    return len(msg) * (GW + GAP) * scale - GAP * scale
+
+
+def arrow_cells(x, y, s):
+    """A download arrow: a shaft, a head, and a tray under it."""
+    out = []
+    for i in range(4):                                    # shaft
+        out.append((x + 3 * s, y + i * s, 2 * s, s))
+    for i in range(4):                                    # head, narrowing
+        out.append((x + i * s, y + (4 + i) * s, (8 - 2 * i) * s, s))
+    out.append((x, y + 10 * s, 8 * s, s))                 # tray
+    return out
+
+
+def button(path, label, bg, fg, scale=4, pad=14, radius=10):
+    """A download button: an arrow, a label, on a rounded slab."""
+    aw = 8 * scale
+    tw = text_width(label, scale)
+    gap = 5 * scale
+    w = pad * 2 + aw + gap + tw
+    h = pad * 2 + 11 * scale
+    ax, ay = pad, (h - 11 * scale) // 2
+    tx, ty = pad + aw + gap, (h - GH * scale) // 2
+    blocks = arrow_cells(ax, ay, scale) + text_cells(label, tx, ty, scale)
+
+    def inside(px, py):
+        cx = min(max(px, radius), w - radius)
+        cy = min(max(py, radius), h - radius)
+        return (px - cx) ** 2 + (py - cy) ** 2 <= radius * radius
+
+    def px(x, y):
+        if not inside(x + 0.5, y + 0.5):
+            return (0, 0, 0, 0)
+        for bx, by, bw, bh in blocks:
+            if bx <= x < bx + bw and by <= y < by + bh:
+                return (*fg, 255)
+        return (*bg, 255)
+
+    write_png(path, w, h, px)
+    return w, h
+
+
+# Apple grey and Windows blue, so each button looks like where it is going.
+MAC_BG = (0x33, 0x33, 0x38)
+WIN_BG = (0x0F, 0x6C, 0xBD)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
 
@@ -146,6 +262,14 @@ def main():
         blit(w, h, [(cup, BREW, pad, pad)], scale, lambda _x, _y: CHIP),
     )
     print(f"  coffee.png             {w * scale}x{h * scale}  (the cup on the menu row)")
+
+    # 6. The download buttons.
+    for name, label, bg in (
+        ("download-macos", "Download for macOS", MAC_BG),
+        ("download-windows", "Download for Windows", WIN_BG),
+    ):
+        size = button(os.path.join(OUT, f"{name}.png"), label, bg, (255, 255, 255))
+        print(f"  {name + '.png':<22} {size[0]}x{size[1]}")
 
 
 if __name__ == "__main__":
