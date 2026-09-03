@@ -8,21 +8,22 @@ sprints in red.
 
 macOS and Windows · Rust · minimal dependencies · 564KB bundle
 
-## Download
+## Get it
 
-| | | |
-|---|---|---|
-| **macOS** | [**Download RunZoo.zip**](https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo.zip) | Apple silicon and Intel · ~520KB |
-| **Windows** | [**Download RunZoo-windows-x64.zip**](https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo-windows-x64.zip) | 64-bit · ~190KB |
+<p align="center">
+  <a href="https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo.zip"><img src="assets/readme/download-macos.png" width="254" alt="Download for macOS"></a>
+  &nbsp;&nbsp;
+  <a href="https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo-windows-x64.zip"><img src="assets/readme/download-windows.png" width="278" alt="Download for Windows"></a>
+</p>
 
-Both links always give the newest build. Older versions, and what changed in
-each, are on the [releases page](https://github.com/wangjacsi/RunZoo/releases).
+<p align="center">
+  <sub>macOS: Apple silicon and Intel, ~520KB · Windows: 64-bit, ~190KB<br>
+  No Rust, no toolchain, nothing else to install. Both links always give the newest build.</sub>
+</p>
 
-No Rust, no toolchain, nothing else to install.
+Then:
 
-## Install
-
-*macOS* — unzip and drag `RunZoo.app` into Applications. The build is ad-hoc
+**macOS** — unzip and drag `RunZoo.app` into Applications. The build is ad-hoc
 signed rather than notarised, so macOS quarantines the download; clear it once:
 
 ```sh
@@ -30,14 +31,19 @@ xattr -dr com.apple.quarantine /Applications/RunZoo.app
 open /Applications/RunZoo.app
 ```
 
-*Windows* — unzip and run `runzoo.exe`. The animal appears in the notification
+**Windows** — unzip and run `runzoo.exe`. The animal appears in the notification
 area; right-click it for the dashboard. It is unsigned, so SmartScreen asks once
 (More info → Run anyway). To start it with Windows, put a shortcut in
 `shell:startup`.
 
-**Or build it yourself, on a Mac with nothing installed yet.** One command. It installs
-the Xcode Command Line Tools and Rust if they are missing, builds, installs into
-`/Applications` and launches:
+Older versions, and what changed in each, are on the
+[releases page](https://github.com/wangjacsi/RunZoo/releases).
+
+## Or build it yourself
+
+On a Mac with nothing installed yet, one command. It installs the Xcode Command
+Line Tools and Rust if they are missing, builds, installs into `/Applications`
+and launches:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/wangjacsi/RunZoo/main/tools/install.sh | bash
