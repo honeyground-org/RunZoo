@@ -59,8 +59,8 @@ jobs:
 
           | | |
           |---|---|
-          | **macOS** | [RunZoo.zip](https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo.zip) — Apple silicon and Intel |
-          | **Windows** | [RunZoo-windows-x64.zip](https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo-windows-x64.zip) — 64-bit |
+          | **macOS** | [RunZoo.zip](https://github.com/honeyground-org/RunZoo/releases/latest/download/RunZoo.zip) — Apple silicon and Intel |
+          | **Windows** | [RunZoo-windows-x64.zip](https://github.com/honeyground-org/RunZoo/releases/latest/download/RunZoo-windows-x64.zip) — 64-bit |
 
           (Or from the Assets list at the bottom of this page, which is pinned
           to this version rather than the newest one.)

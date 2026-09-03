@@ -11,9 +11,9 @@ macOS and Windows · Rust · minimal dependencies · 564KB bundle
 ## Get it
 
 <p align="center">
-  <a href="https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo.zip"><img src="assets/readme/download-macos.png" width="254" alt="Download for macOS"></a>
+  <a href="https://github.com/honeyground-org/RunZoo/releases/latest/download/RunZoo.zip"><img src="assets/readme/download-macos.png" width="254" alt="Download for macOS"></a>
   &nbsp;&nbsp;
-  <a href="https://github.com/wangjacsi/RunZoo/releases/latest/download/RunZoo-windows-x64.zip"><img src="assets/readme/download-windows.png" width="278" alt="Download for Windows"></a>
+  <a href="https://github.com/honeyground-org/RunZoo/releases/latest/download/RunZoo-windows-x64.zip"><img src="assets/readme/download-windows.png" width="278" alt="Download for Windows"></a>
 </p>
 
 <p align="center">
@@ -37,7 +37,7 @@ area; right-click it for the dashboard. It is unsigned, so SmartScreen asks once
 `shell:startup`.
 
 Older versions, and what changed in each, are on the
-[releases page](https://github.com/wangjacsi/RunZoo/releases).
+[releases page](https://github.com/honeyground-org/RunZoo/releases).
 
 ## Or build it yourself
 
@@ -46,7 +46,7 @@ Line Tools and Rust if they are missing, builds, installs into `/Applications`
 and launches:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/wangjacsi/RunZoo/main/tools/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/honeyground-org/RunZoo/main/tools/install.sh | bash
 ```
 
 Already have a checkout? `./tools/install.sh`, and add `--login-item` to start it
