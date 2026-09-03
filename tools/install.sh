@@ -5,14 +5,14 @@
 #   ./tools/install.sh --login-item    also start it at login
 #
 # From a bare machine, with no checkout:
-#   curl -fsSL https://raw.githubusercontent.com/wangjacsi/RunZoo/main/tools/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/honeyground-org/RunZoo/main/tools/install.sh | bash
 #
 # It installs what is missing (Command Line Tools, Rust) and touches nothing
 # else. If you would rather not build at all, download the .app from
-# https://github.com/wangjacsi/RunZoo/releases instead.
+# https://github.com/honeyground-org/RunZoo/releases instead.
 set -euo pipefail
 
-REPO="https://github.com/wangjacsi/RunZoo.git"
+REPO="https://github.com/honeyground-org/RunZoo.git"
 LOGIN_ITEM=0
 [[ "${1:-}" == "--login-item" ]] && LOGIN_ITEM=1
 
